@@ -1,0 +1,53 @@
+<?php
+// $Id$
+
+/**
+ * Get Mendeley API Connector
+ */
+function biblio_mendeley_get_mendeley_client() {
+	static $mendeley;
+
+	if(empty($mendeley)) {
+		require_once 'sites/all/libraries/mendeleyapi/Mendeley.php';
+		require_once 'sites/all/libraries/mendeleyapi/MendeleyBiblioDoc.php';
+		$mendeley = new Mendeley();
+	}
+	
+	return $mendeley;
+}
+
+/**
+ * Implements hook_node_form_alter()
+ */
+function biblio_mendeley_form_biblio_node_form_alter(&$form, &$form_state) {
+	$form['biblio_mendeley_doc_id'] = array('#type' => 'value', '#value' => $form_state['values']['biblio_mendeley_doc_id']);
+}
+
+/**
+ * Implements hook_nodeapi()
+ */
+function biblio_mendeley_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
+  if($node->type != 'biblio') return;
+  $callback = '_biblio_mendeley_' . str_replace(' ', '_', $op);
+  if (function_exists($callback)) {
+    $ret = $callback($node, $a3, $a4);
+  }
+  return $ret;
+}
+
+function _biblio_mendeley_delete($node) {
+	// additionally delete from mendeley?
+}
+
+function _biblio_mendeley_insert($node) {
+	$mendeley = biblio_mendeley_get_mendeley_client();
+	$biblioDoc = MendeleyBiblioDoc::constructWithNode($node);
+	$response = $mendeley->post('documents', array('document' => $biblioDoc->toArray()));
+	if($response->document_id) {
+		watchdog('info', 'Uploaded Mendeley Document Id ' . $response->document_id);
+	}
+}
+
+function _biblio_mendeley_update($node) {
+	// update on mendeley
+}
