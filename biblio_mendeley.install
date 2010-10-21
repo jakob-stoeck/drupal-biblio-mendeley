@@ -1,0 +1,39 @@
+<?php
+/**
+ * @file
+ * Database table creation for biblio_mendeley module.
+ */
+
+/**
+ * Implements of hook_install().
+ */
+function biblio_mendeley_install() {
+  drupal_install_schema('biblio_mendeley');
+}
+
+function biblio_mendeley_uninstall() {
+  drupal_uninstall_schema('biblio_mendeley');
+}
+
+function biblio_mendeley_enable() {
+  biblio_mendeley_set_system_weight();
+}
+
+function biblio_mendeley_set_system_weight() {
+  return update_sql("UPDATE {system} SET weight = 19 WHERE name = 'biblio_mendeley'");
+}
+
+/**
+ * Implements hook_schema().
+ */
+function biblio_mendeley_schema() {
+  $schema = array();
+  $schema['biblio_mendeley'] = array(
+    'fields' => array(
+      'biblio_mendeley_doc_id' => array('type' => 'varchar', 'not null' => TRUE, 'length' => 255),
+      'nid' => array('type' => 'int', 'not null' => TRUE),
+      ),
+    'primary key' => array('nid'),
+  );
+  return $schema;
+}
