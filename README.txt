@@ -9,7 +9,7 @@ This module adds, updates and deletes documents on Mendeley as they get changed 
 Dependencies
 ------------
 
-To contact Mendeley you need both the OAuth Library and the Mendeley API client. I recommend installing them to /sites/all/libraries/.
+To contact Mendeley you need both the OAuth Library (http://dev.mendeley.com/docs/) and the Mendeley API client (http://github.com/jakob-stoeck/mendeleyapi). I recommend installing them to /sites/all/libraries/.
 
 Usage
 -----
