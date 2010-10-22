@@ -1,5 +1,25 @@
 <?php
 // $Id$
+/**
+ *   biblio_mendeley.module for Drupal
+ *
+ *   Copyright (C) 2010  Jakob Stoeck
+ *
+ *   This program is free software; you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation; either version 2 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License along
+ *   with this program; if not, write to the Free Software Foundation, Inc.,
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ */
 
 /**
  * Get Mendeley API Connector
@@ -66,6 +86,15 @@ function biblio_mendeley_menu() {
 		'type' => MENU_NORMAL_ITEM,
 	 );
 
+	$items['admin/settings/biblio-mendeley/synchronize'] = array(
+		'title' => 'Biblio Mendeley Synchronize',
+		'description' => 'Synchronize Biblio Mendeley',
+		'page callback' => 'biblio_mendeley_synchronize',
+		'page arguments' => array('biblio_mendeley_admin'),
+		'access arguments' => array('access administration pages'),
+		'type' => MENU_LOCAL_TASK,
+	 );
+
 	return $items;
 }
 
@@ -83,30 +112,43 @@ function biblio_mendeley_form_biblio_node_form_alter(&$form, &$form_state) {
  * Implements hook_nodeapi()
  */
 function biblio_mendeley_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
-  if($node->type === 'biblio') {
+  if($node->type === 'biblio' && !biblio_mendeley_is_synchronizing()) {
 		switch($op) {
 			case 'delete':
 				if(user_access('delete mendeley documents')) {
 					_biblio_mendeley_set_mendeley_vars($node);
-					_biblio_mendeley_delete($node);
+					_biblio_mendeley_delete_remote($node);
 				}
 			break;
 
 			case 'insert':
 				if(user_access('insert mendeley documents')) {
 					_biblio_mendeley_set_mendeley_vars($node);
-					_biblio_mendeley_insert($node);
+					_biblio_mendeley_insert_remote($node);
 				}
 			break;
 
 			case 'update':
 				if(user_access('update mendeley documents')) {
 					_biblio_mendeley_set_mendeley_vars($node);
-					_biblio_mendeley_update($node);
+					_biblio_mendeley_update_remote($node);
 				}
 			break;
 		}
 	}
+}
+
+/**
+ * Indicates if biblio_mendeley_synchronize is running
+ * 
+ * A flag to e.g. disable nodeapi hooks while mass-inserting
+ */
+function biblio_mendeley_is_synchronizing($flag = FALSE) {
+	static $status;
+	if($status !== TRUE && $status !== FALSE) {
+		$status = $flag;
+	}
+	return $status;
 }
 
 /**
@@ -114,41 +156,106 @@ function biblio_mendeley_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
  *
  * All local content which was not uploaded to Mendeley will be erased. Make sure, all users have "insert mendeley document" privileges.
  */
-function _biblio_mendeley_synchronize() {
+function biblio_mendeley_synchronize() {
 	if($groupId = variable_get('biblio_mendeley_group_id', false)) {
 		$mendeley = biblio_mendeley_get_mendeley_client();
-		$group = $mendeley->getGroupDocuments($groupId); // we should get all content here, but we can't due to rate limiting
+		try {
+			$group = $mendeley->getGroupDocuments($groupId, array('items' => 10000));
 
-		global $user;
-		$original_user = $user;
-		$user = user_load(1);
+			// for a cron we need to switch to a user with update, delete, insert privileges
+			global $user;
+			$original_user = $user;
+			$user = user_load(1);
 
-		// get lists of doc ids and node ids
+			// get list of doc ids and node ids
+			$local_group_ids = array_filter((array)_biblio_mendeley_get_doc_id());
+			$remote_group_ids = array_filter((array)$group->document_ids);
 
-		// make arrays: $to_be_deleted, $to_be_updated, $to_be_inserted in/from biblio
+			$to_be_deleted = array_diff($local_group_ids, $remote_group_ids);
+			$to_be_inserted = array_diff($remote_group_ids, $local_group_ids);
+			$to_be_updated = array_intersect($local_group_ids, $remote_group_ids);
 
-		foreach($group->documentIds as $id) {
-			$node = node_load(_biblio_mendeley_get_node_id($id), NULL, TRUE);
-			$mendeley = $mendeley->get('documents/' . $id);
+			biblio_mendeley_is_synchronizing(TRUE);
 
-			// update node
+			foreach($to_be_deleted as $nid => $biblio_mendeley_doc_id) {
+				$node = new stdClass();
+				$node->nid = $nid;
+				_biblio_mendeley_delete_local($node);
+				_biblio_mendeley_calm_the_cache();
+			}
+		
+			foreach($to_be_inserted as $biblio_mendeley_doc_id) {
+				$node = MendeleyBiblioDoc::constructWithDocumentId($biblio_mendeley_doc_id)->toNode();
+				_biblio_mendeley_insert_local($node);
+				_biblio_mendeley_calm_the_cache();
+			}
+
+			foreach($to_be_updated as $nid => $biblio_mendeley_doc_id) {
+				$doc = MendeleyBiblioDoc::constructWithDocumentId($biblio_mendeley_doc_id);
+				$node = node_load($nid, NULL, TRUE);
+				$node->biblio_mendeley_doc_id = $biblio_mendeley_doc_id;
+				_biblio_mendeley_update_local($node);
+			}
+
+			biblio_mendeley_is_synchronizing(FALSE);
+
+			$user = $original_user;
+		} catch(Exception $e) {
+			watchdog('error', $e->getMessage());
+			drupal_set_message($e->getMessage(), 'error');
 		}
-		$user = $original_user;
 	}
 }
 
-function _biblio_mendeley_get_doc_id($node) {
-	return db_result(db_query('SELECT biblio_mendeley_doc_id FROM {biblio_mendeley} WHERE nid = %d', $node->nid);
+/**
+ * Empty the node cache every n-th time.
+ * 
+ * node_delete and node_save use node_load which builds a static node cache. This grows too large with too many nodes.
+ * 
+ * @param int $clear_every
+ */
+function _biblio_mendeley_calm_the_cache($clear_every = 10) {
+	static $i;
+	
+	if(empty($i) && $i !== 0) {
+		$i = 0;
+	} else {
+		$i++;
+		if($i % $clear_every === 0) {
+			node_load(FALSE, NULL, TRUE);
+		}
+	}
+}
+
+/**
+ * Get Mendeley doc ids
+ * 
+ * @param stdClass $node
+ * 	if null, returns all Mendeley doc ids currently in Biblio
+ * @return mixed
+ * 	array of document ids or string
+ */
+function _biblio_mendeley_get_doc_id($node = null) {
+	if($node === null) {
+		$query = db_query('SELECT biblio_mendeley_doc_id, nid FROM {biblio_mendeley}');
+		$documentIds = array();
+		while($return = db_fetch_object($query)) {
+			$document_ids[$return->nid] = $return->biblio_mendeley_doc_id;
+		}
+		return $document_ids;
+	} elseif(isset($node->nid)) {
+		return db_result(db_query('SELECT biblio_mendeley_doc_id FROM {biblio_mendeley} WHERE nid = %d', $node->nid));
+	}
 }
 
 function _biblio_mendeley_get_node_id($document_id) {
-	return db_result(db_query('SELECT nid FROM {biblio_mendeley} WHERE biblio_mendeley_doc_id = "%s"', $document_id);
+	return db_result(db_query('SELECT nid FROM {biblio_mendeley} WHERE biblio_mendeley_doc_id = "%s"', $document_id));
 }
 
 /**
  * Adds group id and document id to node for Mendeley client processing
  *
- * @param StdClass $node
+ * @param stdClass $node
  */
 function _biblio_mendeley_set_mendeley_vars(&$node) {
 	$node->biblio_mendeley_doc_id = _biblio_mendeley_get_doc_id($node);
@@ -156,11 +263,60 @@ function _biblio_mendeley_set_mendeley_vars(&$node) {
 }
 
 /**
+ * Locally delete a Biblio node (without changing Mendeley)
+ * 
+ * @param stdClass $node
+ */
+function _biblio_mendeley_delete_local($node) {
+	db_query('DELETE FROM {biblio_mendeley} WHERE nid = %d', $node->nid);
+	node_delete($node->nid);
+}
+
+/**
+ * Locally update a Biblio node (without changing Mendeley)
+ * 
+ * @param stdClass $node
+ */
+function _biblio_mendeley_update_local($node) {
+	try {
+		$remote = MendeleyBiblioDoc::constructWithDocumentId($node->biblio_mendeley_doc_id);
+		$local = MendeleyBiblioDoc::constructWithNode($node);
+		$skip = MendeleyBiblioDoc::notMapped();
+
+		$updated = FALSE;
+
+		foreach($remote as $key => $remoteValue) {
+			if(!in_array($key, $skip) && $remoteValue != $local->$key) {
+				$local->$key = $remoteValue;
+				var_dump('difference in ' . $key, array('remote' => $remoteValue, 'local' => $local->key));
+				$updated = TRUE;
+			}
+		}
+		if($updated === TRUE) {
+			// node_save($node);
+		}
+	} catch(Exception $e) {
+		die($e->getMessage());
+		// watchdog('biblio error', $e->getMessage());
+	}
+}
+
+/**
+ * Locally insert a Biblio node (without changing Mendeley)
+ * 
+ * @param stdClass $node
+ */
+function _biblio_mendeley_insert_local($node) {
+	node_save($node);
+	drupal_write_record('biblio_mendeley', $node);
+}
+
+/**
  * Deletes Mendeley document
  *
- * @param StdClass $node
+ * @param stdClass $node
  */
-function _biblio_mendeley_delete($node) {
+function _biblio_mendeley_delete_remote($node) {
 	if(isset($node->biblio_mendeley_doc_id) && is_numeric($node->biblio_mendeley_doc_id)) {
 		db_query('DELETE FROM {biblio_mendeley} WHERE nid = %d', $node->nid);
 		$mendeley = biblio_mendeley_get_mendeley_client();
@@ -174,9 +330,9 @@ function _biblio_mendeley_delete($node) {
  *
  * Since the Mendeley API doesn't support updating we inserted a new document and delete the old one.
  *
- * @param StdClass $node
+ * @param stdClass $node
  */
-function _biblio_mendeley_update(&$node) {
+function _biblio_mendeley_update_remote(&$node) {
 	if(isset($node->biblio_mendeley_doc_id) && is_numeric($node->biblio_mendeley_doc_id)) {
 		$mendeley = biblio_mendeley_get_mendeley_client();
 		$biblioDoc = MendeleyBiblioDoc::constructWithNode($node);
@@ -199,9 +355,9 @@ function _biblio_mendeley_update(&$node) {
 /**
  * Inserts new Mendeley document
  *
- * @param StdClass $node
+ * @param stdClass $node
  */
-function _biblio_mendeley_insert(&$node) {
+function _biblio_mendeley_insert_remote(&$node) {
 	$mendeley = biblio_mendeley_get_mendeley_client();
 	$biblioDoc = MendeleyBiblioDoc::constructWithNode($node);
 
