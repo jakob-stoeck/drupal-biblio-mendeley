@@ -63,9 +63,24 @@ function biblio_mendeley_admin() {
 		'#size' => 90,
 		'#maxlength' => 60,
 		'#description' => t('Please input the Mendeley group id to which uploaded documents are added. If empty, will upload it to the private library of the Mendeley API consumer key owner.'),
-		'#required' => FALSE,
 	);
 
+	$vocabularies = module_invoke('taxonomy', 'get_vocabularies');
+  if(count($vocabularies)) {
+		$taxo_options = array();
+	  $taxo_options[0] = '<'. t('none') .'>';
+    foreach ($vocabularies as $voc) {
+      $taxo_options[$voc->vid] =  $voc->name;
+    }
+		$form['biblio_mendeley_tag_vocabulary'] = array(
+			'#type' => 'select',
+			'#title' => t('Vocabulary'),
+			'#default_value' => variable_get('biblio_mendeley_tag_vocabulary', 0),
+			'#options' => $taxo_options,
+			'#description' => t('Mendeley tags will be used as a node taxonomy in Drupal. Note: This has no influence on Mendeley or Biblio keywords.'),
+			'#multiple' => FALSE,
+		);
+	}
 	$form['#submit'][] = 'biblio_mendeley_admin_submit';
 
 	return system_settings_form($form);
@@ -140,13 +155,13 @@ function biblio_mendeley_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
 
 /**
  * Indicates if biblio_mendeley_synchronize is running
- * 
+ *
  * A flag to e.g. disable nodeapi hooks while mass-inserting
  */
-function biblio_mendeley_is_synchronizing($flag = FALSE) {
+function biblio_mendeley_is_synchronizing($default = FALSE) {
 	static $status;
 	if($status !== TRUE && $status !== FALSE) {
-		$status = $flag;
+		$status = $default;
 	}
 	return $status;
 }
@@ -160,7 +175,13 @@ function biblio_mendeley_synchronize() {
 	if($groupId = variable_get('biblio_mendeley_group_id', false)) {
 		$mendeley = biblio_mendeley_get_mendeley_client();
 		try {
-			$group = $mendeley->getGroupDocuments($groupId, array('items' => 10000));
+			$all_items = 10000;
+			$group = $mendeley->getGroupDocuments($groupId, array('items' => $all_items));
+
+			if($group->total_pages != 1) {
+				// our logic works only with the whole set of documents
+				throw new Exception(t('Couldn\'t fetch all documents at once, perhaps because there are more than %max_results (%total_results). You could try to raise the limit biblio_mendeley_synchronize.', array('%max_results' => $all_items, '%total_results' => $group->total_results)));
+			}
 
 			// for a cron we need to switch to a user with update, delete, insert privileges
 			global $user;
@@ -175,6 +196,10 @@ function biblio_mendeley_synchronize() {
 			$to_be_inserted = array_diff($remote_group_ids, $local_group_ids);
 			$to_be_updated = array_intersect($local_group_ids, $remote_group_ids);
 
+			if(Configuration::DEBUG > 0) {
+				var_dump(compact('to_be_deleted', 'to_be_inserted', 'to_be_updated'));
+			}
+
 			biblio_mendeley_is_synchronizing(TRUE);
 
 			foreach($to_be_deleted as $nid => $biblio_mendeley_doc_id) {
@@ -183,9 +208,10 @@ function biblio_mendeley_synchronize() {
 				_biblio_mendeley_delete_local($node);
 				_biblio_mendeley_calm_the_cache();
 			}
-		
+
 			foreach($to_be_inserted as $biblio_mendeley_doc_id) {
-				$node = MendeleyBiblioDoc::constructWithDocumentId($biblio_mendeley_doc_id)->toNode();
+				$doc = MendeleyBiblioDoc::constructWithDocumentId($biblio_mendeley_doc_id);
+				$node = $doc->toNode();
 				_biblio_mendeley_insert_local($node);
 				_biblio_mendeley_calm_the_cache();
 			}
@@ -195,6 +221,7 @@ function biblio_mendeley_synchronize() {
 				$node = node_load($nid, NULL, TRUE);
 				$node->biblio_mendeley_doc_id = $biblio_mendeley_doc_id;
 				_biblio_mendeley_update_local($node);
+				_biblio_mendeley_calm_the_cache();
 			}
 
 			biblio_mendeley_is_synchronizing(FALSE);
@@ -209,14 +236,14 @@ function biblio_mendeley_synchronize() {
 
 /**
  * Empty the node cache every n-th time.
- * 
+ *
  * node_delete and node_save use node_load which builds a static node cache. This grows too large with too many nodes.
- * 
+ *
  * @param int $clear_every
  */
 function _biblio_mendeley_calm_the_cache($clear_every = 10) {
 	static $i;
-	
+
 	if(empty($i) && $i !== 0) {
 		$i = 0;
 	} else {
@@ -229,7 +256,7 @@ function _biblio_mendeley_calm_the_cache($clear_every = 10) {
 
 /**
  * Get Mendeley doc ids
- * 
+ *
  * @param stdClass $node
  * 	if null, returns all Mendeley doc ids currently in Biblio
  * @return mixed
@@ -264,7 +291,7 @@ function _biblio_mendeley_set_mendeley_vars(&$node) {
 
 /**
  * Locally delete a Biblio node (without changing Mendeley)
- * 
+ *
  * @param stdClass $node
  */
 function _biblio_mendeley_delete_local($node) {
@@ -274,8 +301,9 @@ function _biblio_mendeley_delete_local($node) {
 
 /**
  * Locally update a Biblio node (without changing Mendeley)
- * 
+ *
  * @param stdClass $node
+ * @return stdClass
  */
 function _biblio_mendeley_update_local($node) {
 	try {
@@ -283,32 +311,51 @@ function _biblio_mendeley_update_local($node) {
 		$local = MendeleyBiblioDoc::constructWithNode($node);
 		$skip = MendeleyBiblioDoc::notMapped();
 
-		$updated = FALSE;
-
 		foreach($remote as $key => $remoteValue) {
-			if(!in_array($key, $skip) && $remoteValue != $local->$key) {
-				$local->$key = $remoteValue;
-				var_dump('difference in ' . $key, array('remote' => $remoteValue, 'local' => $local->key));
-				$updated = TRUE;
+			if(!in_array($key, $skip) && isset($local->$key) && $remoteValue != $local->$key) {
+				if(Configuration::DEBUG > 0) {
+					var_dump(array('first difference in ' . $node->biblio_mendeley_doc_id . ' for ' . $key => array('remote' => $remoteValue, 'local' => $local->key)));
+				}
+				$node = $remote->toNode($node->nid);
+				node_save($node);
+				if($remote->tags != $local->tags) {
+					_biblio_mendeley_insert_tags($node, $node->biblio_mendeley_tags);
+				}
+				break;
 			}
 		}
-		if($updated === TRUE) {
-			// node_save($node);
-		}
+		return $node;
 	} catch(Exception $e) {
-		die($e->getMessage());
-		// watchdog('biblio error', $e->getMessage());
+		if(Configuration::DEBUG > 0) {
+			die($e->getMessage());
+		}
+		watchdog('biblio error', $e->getMessage());
 	}
 }
 
 /**
  * Locally insert a Biblio node (without changing Mendeley)
- * 
+ *
  * @param stdClass $node
+ * @return stdClass
  */
 function _biblio_mendeley_insert_local($node) {
 	node_save($node);
 	drupal_write_record('biblio_mendeley', $node);
+	_biblio_mendeley_insert_tags($node, $node->biblio_mendeley_tags);
+	return $node;
+}
+
+/**
+ * Adds tags to a node
+ *
+ * @param stdClass $node
+ * @param array $tags
+ */
+function _biblio_mendeley_insert_tags($node, $tags) {
+	if(($taxonomy_id = (int)variable_get('biblio_mendeley_tag_vocabulary', 0)) && $taxonomy_id !== 0 && !empty($tags)) {
+		taxonomy_node_save($node, array($taxonomy_id => implode(',', $node->biblio_mendeley_tags)));
+	}
 }
 
 /**
@@ -321,7 +368,7 @@ function _biblio_mendeley_delete_remote($node) {
 		db_query('DELETE FROM {biblio_mendeley} WHERE nid = %d', $node->nid);
 		$mendeley = biblio_mendeley_get_mendeley_client();
 		$mendeley->delete('documents/' . $node->biblio_mendeley_doc_id);
-		drupal_set_message('Deleted Mendeley document with id ' . $response->document_id);
+		drupal_set_message(t('Deleted Mendeley document with id %s', array('%id' => $response->document_id)));
 	}
 }
 
@@ -344,7 +391,7 @@ function _biblio_mendeley_update_remote(&$node) {
 			if($response->document_id) {
 				$node->biblio_mendeley_doc_id = $response->document_id;
 				drupal_write_record('biblio_mendeley', $node, 'nid');
-				drupal_set_message('Updated Mendeley document with new id ' . $response->document_id);
+				drupal_set_message(t('Updated Mendeley document with new id %id', array('%id' => $response->document_id)));
 			}
 		} catch(Exception $e) {
 			drupal_set_message($e->getMessage(), 'error');
@@ -367,7 +414,7 @@ function _biblio_mendeley_insert_remote(&$node) {
 		if($response->document_id) {
 			$node->biblio_mendeley_doc_id = $response->document_id;
 			drupal_write_record('biblio_mendeley', $node);
-			drupal_set_message('Inserted Mendeley document with new id ' . $response->document_id);
+			drupal_set_message(t('Inserted Mendeley document with new id %id', array('%id' => $response->document_id)));
 		}
 	} catch(Exception $e) {
 		drupal_set_message($e->getMessage(), 'error');
