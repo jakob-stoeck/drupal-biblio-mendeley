@@ -56,13 +56,27 @@ function biblio_mendeley_perm() {
 function biblio_mendeley_admin() {
 	$form = array();
 
+	$form['biblio_mendeley_sync_local'] = array(
+		'#type' => 'checkbox',
+		'#title' => t('Sync local Biblio nodes'),
+		'#default_value' => variable_get('biblio_mendeley_sync_local', false),
+		'#description' => t('Update/delete/add documents in Biblio if changed in Mendeley.'),
+	);
+
+	$form['biblio_mendeley_sync_remote'] = array(
+		'#type' => 'checkbox',
+		'#title' => t('Sync remote Mendeley documents'),
+		'#default_value' => variable_get('biblio_mendeley_sync_remote', false),
+		'#description' => t('Update/delete/add documents in Mendeley if changed in Biblio.'),
+	);
+
 	$form['biblio_mendeley_group_id'] = array(
 		'#type' => 'textfield',
 		'#title' => t('Mendeley Group ID'),
 		'#default_value' => variable_get('biblio_mendeley_group_id', null),
 		'#size' => 90,
 		'#maxlength' => 60,
-		'#description' => t('Please input the Mendeley group id to which uploaded documents are added. If empty, will upload it to the private library of the Mendeley API consumer key owner.'),
+		'#description' => t('The Mendeley group id to which uploaded documents are added. If empty, uploads to the private library of the Mendeley API consumer key owner.'),
 	);
 
 	$vocabularies = module_invoke('taxonomy', 'get_vocabularies');
@@ -77,7 +91,7 @@ function biblio_mendeley_admin() {
 			'#title' => t('Vocabulary'),
 			'#default_value' => variable_get('biblio_mendeley_tag_vocabulary', 0),
 			'#options' => $taxo_options,
-			'#description' => t('Mendeley tags will be used as a node taxonomy in Drupal. Note: This has no influence on Mendeley or Biblio keywords.'),
+			'#description' => t('Choose a taxonomy if you want to sync Mendeley tags with a taxonomy of Biblio nodes. Note: This has no influence on Mendeley or Biblio keywords.'),
 			'#multiple' => FALSE,
 		);
 	}
@@ -103,11 +117,11 @@ function biblio_mendeley_menu() {
 
 	$items['admin/settings/biblio-mendeley/synchronize'] = array(
 		'title' => 'Biblio Mendeley Synchronize',
-		'description' => 'Synchronize Biblio Mendeley',
+		'description' => 'Synchronize Biblio Mendeley manually',
 		'page callback' => 'biblio_mendeley_synchronize',
 		'page arguments' => array('biblio_mendeley_admin'),
 		'access arguments' => array('access administration pages'),
-		'type' => MENU_LOCAL_TASK,
+		'type' => MENU_CALLBACK,
 	 );
 
 	return $items;
@@ -127,24 +141,27 @@ function biblio_mendeley_form_biblio_node_form_alter(&$form, &$form_state) {
  * Implements hook_nodeapi()
  */
 function biblio_mendeley_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
-  if($node->type === 'biblio' && !biblio_mendeley_is_synchronizing()) {
+  if(($node->type === 'biblio') && !biblio_mendeley_is_synchronizing()) {
 		switch($op) {
 			case 'delete':
 				if(user_access('delete mendeley documents')) {
-					_biblio_mendeley_set_mendeley_vars($node);
-					_biblio_mendeley_delete_remote($node);
+					_biblio_mendeley_delete_local($node);
+					if(variable_get('biblio_mendeley_sync_remote', false)) {
+						_biblio_mendeley_set_mendeley_vars($node);
+						_biblio_mendeley_delete_remote($node);
+					}
 				}
 			break;
 
 			case 'insert':
-				if(user_access('insert mendeley documents')) {
+				if(user_access('insert mendeley documents') && variable_get('biblio_mendeley_sync_remote', false)) {
 					_biblio_mendeley_set_mendeley_vars($node);
 					_biblio_mendeley_insert_remote($node);
 				}
 			break;
 
 			case 'update':
-				if(user_access('update mendeley documents')) {
+				if(user_access('update mendeley documents') && variable_get('biblio_mendeley_sync_remote', false)) {
 					_biblio_mendeley_set_mendeley_vars($node);
 					_biblio_mendeley_update_remote($node);
 				}
@@ -157,6 +174,8 @@ function biblio_mendeley_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
  * Indicates if biblio_mendeley_synchronize is running
  *
  * A flag to e.g. disable nodeapi hooks while mass-inserting
+ * 
+ * @param boolean $default
  */
 function biblio_mendeley_is_synchronizing($default = FALSE) {
 	static $status;
@@ -167,26 +186,30 @@ function biblio_mendeley_is_synchronizing($default = FALSE) {
 }
 
 /**
+ * Implements hook_cron()
+ */
+function biblio_mendeley_cron() {
+	if(variable_get('biblio_mendeley_sync_local', false)) {
+		biblio_mendeley_synchronize();
+	}
+}
+
+/**
  * For each document in the group it parses the local biblio entries. If they differ, they get replaced by the Mendeley content.
  *
  * All local content which was not uploaded to Mendeley will be erased. Make sure, all users have "insert mendeley document" privileges.
  */
 function biblio_mendeley_synchronize() {
-	if($groupId = variable_get('biblio_mendeley_group_id', false)) {
+	if(($groupId = variable_get('biblio_mendeley_group_id', false)) && variable_get('biblio_mendeley_sync_local', false)) {
 		$mendeley = biblio_mendeley_get_mendeley_client();
 		try {
 			$all_items = 10000;
 			$group = $mendeley->getGroupDocuments($groupId, array('items' => $all_items));
 
 			if($group->total_pages != 1) {
-				// our logic works only with the whole set of documents
-				throw new Exception(t('Couldn\'t fetch all documents at once, perhaps because there are more than %max_results (%total_results). You could try to raise the limit biblio_mendeley_synchronize.', array('%max_results' => $all_items, '%total_results' => $group->total_results)));
+				// logic works only with the whole set of documents
+				throw new Exception(t('Couldn\'t fetch all documents at once, perhaps because there are more than %max_results (%total_results). Please open an Biblio issue on drupal.org if that happens to you.', array('%max_results' => $all_items, '%total_results' => $group->total_results)));
 			}
-
-			// for a cron we need to switch to a user with update, delete, insert privileges
-			global $user;
-			$original_user = $user;
-			$user = user_load(1);
 
 			// get list of doc ids and node ids
 			$local_group_ids = array_filter((array)_biblio_mendeley_get_doc_id());
@@ -201,11 +224,16 @@ function biblio_mendeley_synchronize() {
 			}
 
 			biblio_mendeley_is_synchronizing(TRUE);
+			// we need to switch to a user with update, delete, insert privileges
+			global $user;
+			$original_user = $user;
+			$user = user_load(1);
 
 			foreach($to_be_deleted as $nid => $biblio_mendeley_doc_id) {
 				$node = new stdClass();
 				$node->nid = $nid;
 				_biblio_mendeley_delete_local($node);
+				node_delete($node->nid);
 				_biblio_mendeley_calm_the_cache();
 			}
 
@@ -224,9 +252,9 @@ function biblio_mendeley_synchronize() {
 				_biblio_mendeley_calm_the_cache();
 			}
 
+			$user = $original_user;
 			biblio_mendeley_is_synchronizing(FALSE);
 
-			$user = $original_user;
 		} catch(Exception $e) {
 			watchdog('error', $e->getMessage());
 			drupal_set_message($e->getMessage(), 'error');
@@ -296,7 +324,6 @@ function _biblio_mendeley_set_mendeley_vars(&$node) {
  */
 function _biblio_mendeley_delete_local($node) {
 	db_query('DELETE FROM {biblio_mendeley} WHERE nid = %d', $node->nid);
-	node_delete($node->nid);
 }
 
 /**
@@ -319,7 +346,7 @@ function _biblio_mendeley_update_local($node) {
 				$node = $remote->toNode($node->nid);
 				node_save($node);
 				if($remote->tags != $local->tags) {
-					_biblio_mendeley_insert_tags($node, $node->biblio_mendeley_tags);
+					_biblio_mendeley_insert_tags($node, $node->tags);
 				}
 				break;
 			}
@@ -342,7 +369,7 @@ function _biblio_mendeley_update_local($node) {
 function _biblio_mendeley_insert_local($node) {
 	node_save($node);
 	drupal_write_record('biblio_mendeley', $node);
-	_biblio_mendeley_insert_tags($node, $node->biblio_mendeley_tags);
+	_biblio_mendeley_insert_tags($node, $node->tags);
 	return $node;
 }
 
@@ -354,7 +381,7 @@ function _biblio_mendeley_insert_local($node) {
  */
 function _biblio_mendeley_insert_tags($node, $tags) {
 	if(($taxonomy_id = (int)variable_get('biblio_mendeley_tag_vocabulary', 0)) && $taxonomy_id !== 0 && !empty($tags)) {
-		taxonomy_node_save($node, array($taxonomy_id => implode(',', $node->biblio_mendeley_tags)));
+		taxonomy_node_save($node, array($taxonomy_id => implode(',', $node->tags)));
 	}
 }
 
@@ -365,7 +392,6 @@ function _biblio_mendeley_insert_tags($node, $tags) {
  */
 function _biblio_mendeley_delete_remote($node) {
 	if(isset($node->biblio_mendeley_doc_id) && is_numeric($node->biblio_mendeley_doc_id)) {
-		db_query('DELETE FROM {biblio_mendeley} WHERE nid = %d', $node->nid);
 		$mendeley = biblio_mendeley_get_mendeley_client();
 		$mendeley->delete('documents/' . $node->biblio_mendeley_doc_id);
 		drupal_set_message(t('Deleted Mendeley document with id %s', array('%id' => $response->document_id)));
