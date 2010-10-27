@@ -56,27 +56,26 @@ function biblio_mendeley_perm() {
 function biblio_mendeley_admin() {
 	$form = array();
 
-	$form['biblio_mendeley_sync_local'] = array(
+	$form['local_sync'] = array(
+		'#type' => 'fieldset',
+		'#title' => t('Local Biblio Nodes Sync'),
+		'#collapsible' => TRUE,
+	);
+
+	$form['local_sync']['biblio_mendeley_sync_local'] = array(
 		'#type' => 'checkbox',
-		'#title' => t('Sync local Biblio nodes'),
-		'#default_value' => variable_get('biblio_mendeley_sync_local', false),
+		'#title' => t('Synchronize local Biblio nodes'),
+		'#default_value' => variable_get('biblio_mendeley_sync_local', FALSE),
 		'#description' => t('Update/delete/add documents in Biblio if changed in Mendeley.'),
 	);
 
-	$form['biblio_mendeley_sync_remote'] = array(
-		'#type' => 'checkbox',
-		'#title' => t('Sync remote Mendeley documents'),
-		'#default_value' => variable_get('biblio_mendeley_sync_remote', false),
-		'#description' => t('Update/delete/add documents in Mendeley if changed in Biblio.'),
-	);
-
-	$form['biblio_mendeley_group_id'] = array(
+	$form['local_sync']['biblio_mendeley_sync_amount'] = array(
 		'#type' => 'textfield',
-		'#title' => t('Mendeley Group ID'),
-		'#default_value' => variable_get('biblio_mendeley_group_id', null),
-		'#size' => 90,
+		'#title' => t('Update Amount'),
+		'#default_value' => variable_get('biblio_mendeley_sync_amount', 10),
+		'#size' => 30,
 		'#maxlength' => 60,
-		'#description' => t('The Mendeley group id to which uploaded documents are added. If empty, uploads to the private library of the Mendeley API consumer key owner.'),
+		'#description' => t('How many existing Biblio nodes should be checked for updates with Mendeley in one run. Don\'t set this number too high or you could reach the Mendeley rate limit.'),
 	);
 
 	$vocabularies = module_invoke('taxonomy', 'get_vocabularies');
@@ -86,7 +85,7 @@ function biblio_mendeley_admin() {
     foreach ($vocabularies as $voc) {
       $taxo_options[$voc->vid] =  $voc->name;
     }
-		$form['biblio_mendeley_tag_vocabulary'] = array(
+		$form['local_sync']['biblio_mendeley_tag_vocabulary'] = array(
 			'#type' => 'select',
 			'#title' => t('Vocabulary'),
 			'#default_value' => variable_get('biblio_mendeley_tag_vocabulary', 0),
@@ -95,6 +94,30 @@ function biblio_mendeley_admin() {
 			'#multiple' => FALSE,
 		);
 	}
+
+	$form['remote_sync'] = array(
+		'#type' => 'fieldset',
+		'#title' => t('Remote Mendeley Documents Sync'),
+		'#collapsible' => TRUE,
+	);
+
+	$form['remote_sync']['biblio_mendeley_sync_remote'] = array(
+		'#type' => 'checkbox',
+		'#title' => t('Synchronize remote Mendeley documents'),
+		'#default_value' => variable_get('biblio_mendeley_sync_remote', FALSE),
+		'#description' => t('Update/delete/add documents in Mendeley if changed in Biblio.'),
+	);
+
+	$form['remote_sync']['biblio_mendeley_group_id'] = array(
+		'#type' => 'textfield',
+		'#title' => t('Mendeley Group ID'),
+		'#default_value' => variable_get('biblio_mendeley_group_id', NULL),
+		'#size' => 30,
+		'#maxlength' => 60,
+		'#description' => t('The Mendeley group id to which uploaded documents are added. If empty, uploads to the private library of the Mendeley API consumer key owner.'),
+	);
+
+
 	$form['#submit'][] = 'biblio_mendeley_admin_submit';
 
 	return system_settings_form($form);
@@ -146,7 +169,7 @@ function biblio_mendeley_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
 			case 'delete':
 				if(user_access('delete mendeley documents')) {
 					_biblio_mendeley_delete_local($node);
-					if(variable_get('biblio_mendeley_sync_remote', false)) {
+					if(variable_get('biblio_mendeley_sync_remote', FALSE)) {
 						_biblio_mendeley_set_mendeley_vars($node);
 						_biblio_mendeley_delete_remote($node);
 					}
@@ -154,14 +177,14 @@ function biblio_mendeley_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
 			break;
 
 			case 'insert':
-				if(user_access('insert mendeley documents') && variable_get('biblio_mendeley_sync_remote', false)) {
+				if(user_access('insert mendeley documents') && variable_get('biblio_mendeley_sync_remote', FALSE)) {
 					_biblio_mendeley_set_mendeley_vars($node);
 					_biblio_mendeley_insert_remote($node);
 				}
 			break;
 
 			case 'update':
-				if(user_access('update mendeley documents') && variable_get('biblio_mendeley_sync_remote', false)) {
+				if(user_access('update mendeley documents') && variable_get('biblio_mendeley_sync_remote', FALSE)) {
 					_biblio_mendeley_set_mendeley_vars($node);
 					_biblio_mendeley_update_remote($node);
 				}
@@ -189,7 +212,7 @@ function biblio_mendeley_is_synchronizing($default = FALSE) {
  * Implements hook_cron()
  */
 function biblio_mendeley_cron() {
-	if(variable_get('biblio_mendeley_sync_local', false)) {
+	if(variable_get('biblio_mendeley_sync_local', FALSE)) {
 		biblio_mendeley_synchronize();
 	}
 }
@@ -200,7 +223,7 @@ function biblio_mendeley_cron() {
  * All local content which was not uploaded to Mendeley will be erased. Make sure, all users have "insert mendeley document" privileges.
  */
 function biblio_mendeley_synchronize() {
-	if(($groupId = variable_get('biblio_mendeley_group_id', false)) && variable_get('biblio_mendeley_sync_local', false)) {
+	if(($groupId = variable_get('biblio_mendeley_group_id', FALSE)) && variable_get('biblio_mendeley_sync_local', FALSE)) {
 		$mendeley = biblio_mendeley_get_mendeley_client();
 		try {
 			$all_items = 10000;
@@ -244,7 +267,12 @@ function biblio_mendeley_synchronize() {
 				_biblio_mendeley_calm_the_cache();
 			}
 
+			$update_amount = variable_get('biblio_mendeley_sync_amount', 0);
+
 			foreach($to_be_updated as $nid => $biblio_mendeley_doc_id) {
+				if($update_amount-- === 0) {
+					break;
+				}
 				$doc = MendeleyBiblioDoc::constructWithDocumentId($biblio_mendeley_doc_id);
 				$node = node_load($nid, NULL, TRUE);
 				$node->biblio_mendeley_doc_id = $biblio_mendeley_doc_id;
@@ -286,13 +314,13 @@ function _biblio_mendeley_calm_the_cache($clear_every = 10) {
  * Get Mendeley doc ids
  *
  * @param stdClass $node
- * 	if null, returns all Mendeley doc ids currently in Biblio
+ * 	if NULL, returns all Mendeley doc ids currently in Biblio
  * @return mixed
  * 	array of document ids or string
  */
-function _biblio_mendeley_get_doc_id($node = null) {
-	if($node === null) {
-		$query = db_query('SELECT biblio_mendeley_doc_id, nid FROM {biblio_mendeley}');
+function _biblio_mendeley_get_doc_id($node = NULL) {
+	if($node === NULL) {
+		$query = db_query('SELECT biblio_mendeley_doc_id, nid FROM {biblio_mendeley} ORDER BY biblio_mendeley_last_sync');
 		$documentIds = array();
 		while($return = db_fetch_object($query)) {
 			$document_ids[$return->nid] = $return->biblio_mendeley_doc_id;
@@ -314,7 +342,7 @@ function _biblio_mendeley_get_node_id($document_id) {
  */
 function _biblio_mendeley_set_mendeley_vars(&$node) {
 	$node->biblio_mendeley_doc_id = _biblio_mendeley_get_doc_id($node);
-	$node->biblio_mendeley_group_id = variable_get('biblio_mendeley_group_id', null);
+	$node->biblio_mendeley_group_id = variable_get('biblio_mendeley_group_id', NULL);
 }
 
 /**
@@ -337,11 +365,10 @@ function _biblio_mendeley_update_local($node) {
 		$remote = MendeleyBiblioDoc::constructWithDocumentId($node->biblio_mendeley_doc_id);
 		$local = MendeleyBiblioDoc::constructWithNode($node);
 		$skip = MendeleyBiblioDoc::notMapped();
-
 		foreach($remote as $key => $remoteValue) {
-			if(!in_array($key, $skip) && isset($local->$key) && $remoteValue != $local->$key) {
+			if(!in_array($key, $skip) && isset($local->$key) && ($remoteValue != $local->$key)) {
 				if(Configuration::DEBUG > 0) {
-					var_dump(array('first difference in ' . $node->biblio_mendeley_doc_id . ' for ' . $key => array('remote' => $remoteValue, 'local' => $local->key)));
+					var_dump(array('first difference in ' . $node->biblio_mendeley_doc_id . ' for ' . $key => array('remote' => $remoteValue, 'local' => $local->$key)));
 				}
 				$node = $remote->toNode($node->nid);
 				node_save($node);
@@ -351,6 +378,8 @@ function _biblio_mendeley_update_local($node) {
 				break;
 			}
 		}
+		$node->biblio_mendeley_last_sync = time();
+		drupal_write_record('biblio_mendeley', $node, 'nid');
 		return $node;
 	} catch(Exception $e) {
 		if(Configuration::DEBUG > 0) {
@@ -368,6 +397,7 @@ function _biblio_mendeley_update_local($node) {
  */
 function _biblio_mendeley_insert_local($node) {
 	node_save($node);
+	$node->biblio_mendeley_last_sync = time();
 	drupal_write_record('biblio_mendeley', $node);
 	_biblio_mendeley_insert_tags($node, $node->tags);
 	return $node;
@@ -416,6 +446,7 @@ function _biblio_mendeley_update_remote(&$node) {
 
 			if($response->document_id) {
 				$node->biblio_mendeley_doc_id = $response->document_id;
+				$node->biblio_mendeley_last_sync = time();
 				drupal_write_record('biblio_mendeley', $node, 'nid');
 				drupal_set_message(t('Updated Mendeley document with new id %id', array('%id' => $response->document_id)));
 			}
@@ -439,6 +470,7 @@ function _biblio_mendeley_insert_remote(&$node) {
 
 		if($response->document_id) {
 			$node->biblio_mendeley_doc_id = $response->document_id;
+			$node->biblio_mendeley_last_sync = time();
 			drupal_write_record('biblio_mendeley', $node);
 			drupal_set_message(t('Inserted Mendeley document with new id %id', array('%id' => $response->document_id)));
 		}

@@ -51,10 +51,18 @@ function biblio_mendeley_set_system_weight() {
 function biblio_mendeley_schema() {
   $schema = array();
   $schema['biblio_mendeley'] = array(
+    'description' => 'Stores a connection between Biblio {node}s and Mendeley document ids',
     'fields' => array(
       'biblio_mendeley_doc_id' => array('type' => 'varchar', 'not null' => TRUE, 'length' => 255),
       'nid' => array('type' => 'int', 'not null' => TRUE),
-      ),
+      'biblio_mendeley_last_sync' => array(
+        'description' => t('The last unix timestamp when it was confirmed that local node equals remote document'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      )
+    ),
     'primary key' => array('nid'),
   );
   return $schema;
