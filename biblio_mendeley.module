@@ -33,7 +33,7 @@ function biblio_mendeley_get_mendeley_client() {
 	if(empty($mendeley)) {
 		require_once 'sites/all/libraries/mendeleyapi/Mendeley.php';
 		require_once 'sites/all/libraries/mendeleyapi/MendeleyBiblioDoc.php';
-		$mendeley = new Mendeley();
+		$mendeley = new Mendeley(variable_get('biblio_mendeley_consumer_key', NULL), variable_get('biblio_mendeley_consumer_secret', NULL));
 	}
 
 	return $mendeley;
@@ -117,6 +117,29 @@ function biblio_mendeley_admin() {
 		'#description' => t('The Mendeley group id to which uploaded documents are added. If empty, uploads to the private library of the Mendeley API consumer key owner.'),
 	);
 
+	$form['consumer'] = array(
+		'#type' => 'fieldset',
+		'#title' => t('Consumer'),
+		'#collapsible' => TRUE,
+	);
+
+	$form['consumer']['biblio_mendeley_consumer_key'] = array(
+		'#type' => 'textfield',
+		'#title' => t('Mendeley API Consumer Key'),
+		'#default_value' => variable_get('biblio_mendeley_consumer_key', NULL),
+		'#size' => 30,
+		'#maxlength' => 60,
+		'#description' => t('This value overrides the default setting in mendeleyapi/Configuration.php.'),
+	);
+
+	$form['consumer']['biblio_mendeley_consumer_secret'] = array(
+		'#type' => 'textfield',
+		'#title' => t('Mendeley API Consumer Secret'),
+		'#default_value' => variable_get('biblio_mendeley_consumer_secret', NULL),
+		'#size' => 30,
+		'#maxlength' => 60,
+		'#description' => t('This value overrides the default setting in mendeleyapi/Configuration.php.'),
+	);
 
 	$form['#submit'][] = 'biblio_mendeley_admin_submit';
 
