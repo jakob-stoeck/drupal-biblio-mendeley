@@ -191,24 +191,21 @@ function biblio_mendeley_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
 		switch($op) {
 			case 'delete':
 				if(user_access('delete mendeley documents')) {
-					_biblio_mendeley_delete_local($node);
 					if(variable_get('biblio_mendeley_sync_remote', FALSE)) {
-						_biblio_mendeley_set_mendeley_vars($node);
 						_biblio_mendeley_delete_remote($node);
 					}
+					_biblio_mendeley_delete_local($node);
 				}
 			break;
 
 			case 'insert':
 				if(user_access('insert mendeley documents') && variable_get('biblio_mendeley_sync_remote', FALSE)) {
-					_biblio_mendeley_set_mendeley_vars($node);
 					_biblio_mendeley_insert_remote($node);
 				}
 			break;
 
 			case 'update':
 				if(user_access('update mendeley documents') && variable_get('biblio_mendeley_sync_remote', FALSE)) {
-					_biblio_mendeley_set_mendeley_vars($node);
 					_biblio_mendeley_update_remote($node);
 				}
 			break;
@@ -265,9 +262,11 @@ function biblio_mendeley_synchronize() {
 			$to_be_inserted = array_diff($remote_group_ids, $local_group_ids);
 			$to_be_updated = array_intersect($local_group_ids, $remote_group_ids);
 
-			if(Configuration::DEBUG > 0) {
-				var_dump(compact('to_be_deleted', 'to_be_inserted', 'to_be_updated'));
-			}
+			drupal_set_message(t('Deleting %delete, inserting %insert and updating update biblio documents.', array(
+				'%delete' => count($to_be_deleted),
+				'%insert' => count($to_be_inserted),
+				'%update' => count($to_be_updated),
+			)), 'status');
 
 			biblio_mendeley_is_synchronizing(TRUE);
 			// we need to switch to a user with update, delete, insert privileges
@@ -311,6 +310,7 @@ function biblio_mendeley_synchronize() {
 			drupal_set_message($e->getMessage(), 'error');
 		}
 	}
+	drupal_goto('admin/settings/biblio-mendeley');
 }
 
 /**
@@ -359,16 +359,6 @@ function _biblio_mendeley_get_node_id($document_id) {
 }
 
 /**
- * Adds group id and document id to node for Mendeley client processing
- *
- * @param stdClass $node
- */
-function _biblio_mendeley_set_mendeley_vars(&$node) {
-	$node->biblio_mendeley_doc_id = _biblio_mendeley_get_doc_id($node);
-	$node->biblio_mendeley_group_id = variable_get('biblio_mendeley_group_id', NULL);
-}
-
-/**
  * Locally delete a Biblio node (without changing Mendeley)
  *
  * @param stdClass $node
@@ -405,9 +395,7 @@ function _biblio_mendeley_update_local($node) {
 		drupal_write_record('biblio_mendeley', $node, 'nid');
 		return $node;
 	} catch(Exception $e) {
-		if(Configuration::DEBUG > 0) {
-			die($e->getMessage());
-		}
+		drupal_set_message(t('An error occured, this is mostly due to the Mendeley rate limit: ') . $e->getMessage(), 'error');
 		watchdog('biblio error', $e->getMessage());
 	}
 }
@@ -444,10 +432,10 @@ function _biblio_mendeley_insert_tags($node, $tags) {
  * @param stdClass $node
  */
 function _biblio_mendeley_delete_remote($node) {
-	if(isset($node->biblio_mendeley_doc_id) && is_numeric($node->biblio_mendeley_doc_id)) {
+	if($biblio_mendeley_doc_id = _biblio_mendeley_get_doc_id($node)) {
 		$mendeley = biblio_mendeley_get_mendeley_client();
-		$mendeley->delete('documents/' . $node->biblio_mendeley_doc_id);
-		drupal_set_message(t('Deleted Mendeley document with id %s', array('%id' => $response->document_id)));
+		$mendeley->delete('documents/' . $biblio_mendeley_doc_id);
+		drupal_set_message(t('Deleted Mendeley document with id %id', array('%id' => $response->document_id)));
 	}
 }
 
@@ -458,14 +446,14 @@ function _biblio_mendeley_delete_remote($node) {
  *
  * @param stdClass $node
  */
-function _biblio_mendeley_update_remote(&$node) {
-	if(isset($node->biblio_mendeley_doc_id) && is_numeric($node->biblio_mendeley_doc_id)) {
+function _biblio_mendeley_update_remote($node) {
+	if($biblio_mendeley_doc_id = _biblio_mendeley_get_doc_id($node)) {
 		$mendeley = biblio_mendeley_get_mendeley_client();
-		$biblioDoc = MendeleyBiblioDoc::constructWithNode($node);
+		$biblioDoc = MendeleyBiblioDoc::constructWithNode($node, variable_get('biblio_mendeley_group_id', NULL));
 
 		try {
 			$response = $mendeley->post('documents', $biblioDoc->toParams());
-			$mendeley->delete('documents/' . $node->biblio_mendeley_doc_id);
+			$mendeley->delete('documents/' . $biblio_mendeley_doc_id);
 
 			if($response->document_id) {
 				$node->biblio_mendeley_doc_id = $response->document_id;
@@ -484,10 +472,9 @@ function _biblio_mendeley_update_remote(&$node) {
  *
  * @param stdClass $node
  */
-function _biblio_mendeley_insert_remote(&$node) {
+function _biblio_mendeley_insert_remote($node) {
 	$mendeley = biblio_mendeley_get_mendeley_client();
-	$biblioDoc = MendeleyBiblioDoc::constructWithNode($node);
-
+	$biblioDoc = MendeleyBiblioDoc::constructWithNode($node, variable_get('biblio_mendeley_group_id', NULL));
 	try {
 		$response = $mendeley->post('documents', $biblioDoc->toParams());
 
