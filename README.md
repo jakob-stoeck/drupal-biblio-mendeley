@@ -18,10 +18,13 @@ Usage
 2. Activate Biblio Mendeley (this module) in Drupal
 3. Download and install the [OAuth Library][4] and the [Mendeley API client][5] to DRUPAL_ROOT/sites/all/libraries/:
 
-    `$ cd DRUPAL_ROOT # your drupal folder
-    $ git clone git://github.com/jakob-stoeck/mendeleyapi.git sites/all/libraries/mendeleyapi
-    $ cp sites/all/libraries/mendeleyapi/Configuration{.sample,}.php
-    $ svn checkout http://oauth.googlecode.com/svn/code/php/ sites/all/libraries/oauth`
+    `$ cd DRUPAL_ROOT # your drupal folder`
+    
+    `$ git clone git://github.com/jakob-stoeck/mendeleyapi.git sites/all/libraries/mendeleyapi`
+    
+    `$ cp sites/all/libraries/mendeleyapi/Configuration{.sample,}.php`
+    
+    `$ svn checkout http://oauth.googlecode.com/svn/code/php/ sites/all/libraries/oauth`
 
 4. Go to http://www.yourdomain.tld/admin/settings/biblio-mendeley and insert your Mendeley API information (If you don't have an API Customer account yet, get it from the [Mendeley developer website][1]. You need this one and your normal Mendeley login Account)
 5. Set user permissions for biblio mendeley on http://www.yourdomain.tld/admin/user/permissions
