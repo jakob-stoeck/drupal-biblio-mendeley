@@ -262,7 +262,7 @@ function biblio_mendeley_synchronize() {
 			$to_be_inserted = array_diff($remote_group_ids, $local_group_ids);
 			$to_be_updated = array_intersect($local_group_ids, $remote_group_ids);
 
-			drupal_set_message(t('Deleting %delete, inserting %insert and updating update biblio documents.', array(
+			drupal_set_message(t('Deleting %delete, inserting %insert and updating %update biblio documents.', array(
 				'%delete' => count($to_be_deleted),
 				'%insert' => count($to_be_inserted),
 				'%update' => count($to_be_updated),
