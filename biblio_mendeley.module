@@ -142,6 +142,8 @@ function biblio_mendeley_admin() {
 	);
 
 	$form['#submit'][] = 'biblio_mendeley_admin_submit';
+	$form['#submit'][] = 'biblio_mendeley_synchronize';
+	$form['consumer']['#suffix'] = '<p>Synchronization runs on cron and on save configuration.</p>';
 
 	return system_settings_form($form);
 }
@@ -246,7 +248,7 @@ function biblio_mendeley_synchronize() {
 	if(($groupId = variable_get('biblio_mendeley_group_id', FALSE)) && variable_get('biblio_mendeley_sync_local', FALSE)) {
 		$mendeley = biblio_mendeley_get_mendeley_client();
 		try {
-			$all_items = 10000;
+			$all_items = 100000;
 			$group = $mendeley->getGroupDocuments($groupId, array('items' => $all_items));
 
 			if($group->total_pages != 1) {
@@ -262,11 +264,17 @@ function biblio_mendeley_synchronize() {
 			$to_be_inserted = array_diff($remote_group_ids, $local_group_ids);
 			$to_be_updated = array_intersect($local_group_ids, $remote_group_ids);
 
-			drupal_set_message(t('Deleting %delete, inserting %insert and updating %update biblio documents.', array(
+			drupal_set_message(t('Trying to delete %delete, insert %insert and looking for updates of %update biblio documents.', array(
 				'%delete' => count($to_be_deleted),
 				'%insert' => count($to_be_inserted),
 				'%update' => count($to_be_updated),
 			)), 'status');
+
+			$success = array(
+				'delete' => 0,
+				'insert' => 0,
+				'update' => 0,
+			);
 
 			biblio_mendeley_is_synchronizing(TRUE);
 			// we need to switch to a user with update, delete, insert privileges
@@ -280,6 +288,7 @@ function biblio_mendeley_synchronize() {
 				_biblio_mendeley_delete_local($node);
 				node_delete($node->nid);
 				_biblio_mendeley_calm_the_cache();
+				$success['delete']++;
 			}
 
 			foreach($to_be_inserted as $biblio_mendeley_doc_id) {
@@ -287,23 +296,31 @@ function biblio_mendeley_synchronize() {
 				$node = $doc->toNode();
 				_biblio_mendeley_insert_local($node);
 				_biblio_mendeley_calm_the_cache();
+				$success['insert']++;
 			}
 
 			$update_amount = variable_get('biblio_mendeley_sync_amount', 0);
 
 			foreach($to_be_updated as $nid => $biblio_mendeley_doc_id) {
-				if($update_amount-- === 0) {
+				if($update_amount-- <= 0) {
 					break;
 				}
-				$doc = MendeleyBiblioDoc::constructWithDocumentId($biblio_mendeley_doc_id);
 				$node = node_load($nid, NULL, TRUE);
 				$node->biblio_mendeley_doc_id = $biblio_mendeley_doc_id;
-				_biblio_mendeley_update_local($node);
+				$updated = _biblio_mendeley_update_local($node);
 				_biblio_mendeley_calm_the_cache();
+				if($updated === true) {
+					$success['update']++;
+				}
 			}
 
 			$user = $original_user;
 			biblio_mendeley_is_synchronizing(FALSE);
+			drupal_set_message(t('Deleted %delete, inserted %insert and updated %update biblio documents.', array(
+				'%delete' => $success['delete'],
+				'%insert' => $success['insert'],
+				'%update' => $success['update'],
+			)), 'status');
 
 		} catch(Exception $e) {
 			watchdog('error', $e->getMessage());
@@ -374,26 +391,29 @@ function _biblio_mendeley_delete_local($node) {
  * @return stdClass
  */
 function _biblio_mendeley_update_local($node) {
+	$updated = false;
 	try {
 		$remote = MendeleyBiblioDoc::constructWithDocumentId($node->biblio_mendeley_doc_id);
 		$local = MendeleyBiblioDoc::constructWithNode($node);
 		$skip = MendeleyBiblioDoc::notMapped();
 		foreach($remote as $key => $remoteValue) {
-			if(!in_array($key, $skip) && isset($local->$key) && ($remoteValue != $local->$key)) {
+			if(!in_array($key, $skip) && ($remoteValue != $local->$key)) {
 				if(Configuration::DEBUG > 0) {
 					var_dump(array('first difference in ' . $node->biblio_mendeley_doc_id . ' for ' . $key => array('remote' => $remoteValue, 'local' => $local->$key)));
 				}
 				$node = $remote->toNode($node->nid);
+				$node->vid = $node->nid; // set vid to update a node
 				node_save($node);
 				if($remote->tags != $local->tags) {
 					_biblio_mendeley_insert_tags($node, $node->tags);
 				}
+				$updated = true;
 				break;
 			}
 		}
 		$node->biblio_mendeley_last_sync = time();
 		drupal_write_record('biblio_mendeley', $node, 'nid');
-		return $node;
+		return $updated;
 	} catch(Exception $e) {
 		drupal_set_message(t('An error occured, this is mostly due to the Mendeley rate limit: ') . $e->getMessage(), 'error');
 		watchdog('biblio error', $e->getMessage());
