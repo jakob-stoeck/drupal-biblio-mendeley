@@ -327,7 +327,6 @@ function biblio_mendeley_synchronize() {
 			drupal_set_message($e->getMessage(), 'error');
 		}
 	}
-	drupal_goto('admin/settings/biblio-mendeley');
 }
 
 /**
