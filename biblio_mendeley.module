@@ -441,7 +441,7 @@ function _biblio_mendeley_insert_local($node) {
  */
 function _biblio_mendeley_insert_tags($node, $tags) {
 	if(($taxonomy_id = (int)variable_get('biblio_mendeley_tag_vocabulary', 0)) && $taxonomy_id !== 0 && !empty($tags)) {
-		taxonomy_node_save($node, array($taxonomy_id => implode(',', $node->tags)));
+		taxonomy_node_save($node, array('tags' => array($taxonomy_id => implode(',', $node->tags))));
 	}
 }
 
