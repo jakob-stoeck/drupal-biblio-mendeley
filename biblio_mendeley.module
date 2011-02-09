@@ -469,7 +469,6 @@ function _biblio_mendeley_update_remote($node) {
 	if($biblio_mendeley_doc_id = _biblio_mendeley_get_doc_id($node)) {
 		$mendeley = biblio_mendeley_get_mendeley_client();
 		$biblioDoc = MendeleyBiblioDoc::constructWithNode($node, variable_get('biblio_mendeley_group_id', NULL));
-
 		try {
 			$response = $mendeley->post('documents', $biblioDoc->toParams());
 			$mendeley->delete('documents/' . $biblio_mendeley_doc_id);
