@@ -140,12 +140,12 @@ function biblio_mendeley_admin() {
 		'#maxlength' => 60,
 		'#description' => t('This value overrides the default setting in mendeleyapi/Configuration.php.'),
 	);
-
+	$form = system_settings_form($form);
 	$form['#submit'][] = 'biblio_mendeley_admin_submit';
 	$form['#submit'][] = 'biblio_mendeley_synchronize';
-	$form['consumer']['#suffix'] = '<p>Synchronization runs on cron and on save configuration.</p>';
+	$form['consumer']['#suffix'] = '<p>' . t('Synchronization runs on cron and on save configuration.') . '</p>';
 
-	return system_settings_form($form);
+	return $form;
 }
 
 /**
@@ -172,7 +172,31 @@ function biblio_mendeley_menu() {
 		'type' => MENU_CALLBACK,
 	 );
 
+	$items['admin/settings/biblio-mendeley/delete-local-nodes'] = array(
+		'title' => 'Biblio Mendeley Delete Local Nodes',
+		'description' => 'Delete all local biblio nodes so you can re-import them later on',
+		'page callback' => 'biblio_mendeley_delete_local_nodes',
+		'page arguments' => array('biblio_mendeley_admin'),
+		'access arguments' => array('access administration pages'),
+		'type' => MENU_CALLBACK,
+	 );
+
 	return $items;
+}
+
+/**
+ * Deletes all local biblio nodes so you can re-import them later on
+ */
+function biblio_mendeley_delete_local_nodes() {
+	$result = db_query('SELECT nid FROM {biblio_mendeley}');
+	biblio_mendeley_is_synchronizing(TRUE);
+	while($r = db_fetch_array($result)) {
+		node_delete($r['nid']);
+	}
+	biblio_mendeley_is_synchronizing(FALSE);
+	db_query('TRUNCATE {biblio_mendeley}');
+	drupal_set_message(t('Deleted all biblio mendeley nodes.'));
+	drupal_goto('admin/settings/biblio-mendeley');
 }
 
 /**
@@ -396,15 +420,15 @@ function _biblio_mendeley_update_local($node) {
 		$local = MendeleyBiblioDoc::constructWithNode($node);
 		$skip = MendeleyBiblioDoc::notMapped();
 		foreach($remote as $key => $remoteValue) {
-			if(!in_array($key, $skip) && ($remoteValue != $local->$key)) {
+			if(!in_array($key, $skip) && (trim($remoteValue) != trim($local->$key))) {
 				if(Configuration::DEBUG > 0) {
-					var_dump(array('first difference in ' . $node->biblio_mendeley_doc_id . ' for ' . $key => array('remote' => $remoteValue, 'local' => $local->$key)));
+					var_dump(array('first difference in ' . $node->title . ' (' . $node->biblio_mendeley_doc_id . ') for ' . $key => array('remote' => $remoteValue, 'local' => $local->$key)));
 				}
 				$node = $remote->toNode($node->nid);
 				$node->vid = $node->nid; // set vid to update a node
 				node_save($node);
 				if($remote->tags != $local->tags) {
-					_biblio_mendeley_insert_tags($node, $node->tags);
+					_biblio_mendeley_insert_tags($node);
 				}
 				$updated = true;
 				break;
@@ -429,7 +453,7 @@ function _biblio_mendeley_insert_local($node) {
 	node_save($node);
 	$node->biblio_mendeley_last_sync = time();
 	drupal_write_record('biblio_mendeley', $node);
-	_biblio_mendeley_insert_tags($node, $node->tags);
+	_biblio_mendeley_insert_tags($node);
 	return $node;
 }
 
@@ -439,9 +463,9 @@ function _biblio_mendeley_insert_local($node) {
  * @param stdClass $node
  * @param array $tags
  */
-function _biblio_mendeley_insert_tags($node, $tags) {
-	if(($taxonomy_id = (int)variable_get('biblio_mendeley_tag_vocabulary', 0)) && $taxonomy_id !== 0 && !empty($tags)) {
-		taxonomy_node_save($node, array('tags' => array($taxonomy_id => implode(',', $node->tags))));
+function _biblio_mendeley_insert_tags($node) {
+	if(($taxonomy_id = (int)variable_get('biblio_mendeley_tag_vocabulary', 0)) && $taxonomy_id !== 0 && !empty($node->taxonomy)) {
+		taxonomy_node_save($node, array('tags' => array($taxonomy_id => implode(',', $node->taxonomy))));
 	}
 }
 
