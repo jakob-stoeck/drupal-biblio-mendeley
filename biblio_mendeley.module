@@ -217,10 +217,14 @@ function biblio_mendeley_delete_local_nodes() {
  * Implements hook_node_form_alter()
  */
 function biblio_mendeley_form_biblio_node_form_alter(&$form, &$form_state) {
-	$form['biblio_mendeley_doc_id'] = array(
-		'#type' => 'value',
-		'#value' => $form_state['values']['biblio_mendeley_doc_id']
-	);
+  $form['biblio_mendeley_doc_id'] = array(
+    '#type' => 'value',
+    '#value' => $form_state['values']['biblio_mendeley_doc_id']
+  );
+  $form['biblio_mendeley_group_id'] = array(
+    '#type' => 'value',
+    '#value' => $form_state['values']['biblio_mendeley_group_id']
+  );
 }
 
 /**
@@ -464,6 +468,7 @@ function _biblio_mendeley_update_local($node) {
  * @return stdClass
  */
 function _biblio_mendeley_insert_local($node) {
+	$node->mendeley_group_id[0]['value'] = $node->group_id;
 	node_save($node);
 	$node->biblio_mendeley_last_sync = time();
 	drupal_write_record('biblio_mendeley', $node);
@@ -530,7 +535,7 @@ function _biblio_mendeley_update_remote($node) {
  */
 function _biblio_mendeley_insert_remote($node) {
 	$mendeley = biblio_mendeley_get_mendeley_client();
-	$biblioDoc = MendeleyBiblioDoc::constructWithNode($node, variable_get('biblio_mendeley_group_id', NULL));
+	$biblioDoc = MendeleyBiblioDoc::constructWithNode($node, $node->mendeley_group_id[0]['value']);
 	try {
 		$response = $mendeley->post('documents', $biblioDoc->toParams());
 

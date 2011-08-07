@@ -4,3 +4,4 @@ description = "Adds synchronisation between Mendeley and Biblio"
 core = 6.x
 package = Biblio
 dependencies[] = biblio
+dependencies[] = content
