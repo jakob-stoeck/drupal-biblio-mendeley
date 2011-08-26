@@ -1,62 +1,64 @@
 <?php
-return $mendeley_group_id = array(
-  'label' => 'Mendeley Group',
-  'field_name' => 'field_mendeley_group_id',
-  'type' => 'text',
-  'widget_type' => 'optionwidgets_select',
-  'change' => 'Change basic information',
-  'weight' => '31',
-  'description' => '',
-  'default_value' => 
-  array(
-    0 => 
-    array(
-      'value' => '',
-    ),
-  ),
-  'default_value_php' => '',
-  'default_value_widget' => NULL,
-  'required' => 0,
-  'multiple' => '0',
-  'text_processing' => '0',
-  'max_length' => '',
-  'allowed_values' => '',
-  'allowed_values_php' => 'return array(\'123\' => \'group test\', \'456\' => \'test over\');',
-  'op' => 'Save field settings',
-  'module' => 'text',
-  'widget_module' => 'optionwidgets',
-  'columns' => 
-  array(
-    'value' => 
-    array(
-      'type' => 'text',
-      'size' => 'big',
-      'not null' => false,
-      'sortable' => true,
-      'views' => true,
-    ),
-  ),
-  'display_settings' => 
-  array(
-    'label' => 
-    array(
-      'format' => 'above',
-      'exclude' => 0,
-    ),
-    'teaser' => 
-    array(
-      'format' => 'default',
-      'exclude' => 0,
-    ),
-    'full' => 
-    array(
-      'format' => 'default',
-      'exclude' => 0,
-    ),
-    4 => 
-    array(
-      'format' => 'default',
-      'exclude' => 0,
-    ),
-  ),
-);
+function biblio_mendeley_get_mendeley_group_id_definition() {
+	return array(
+	  'label' => 'Mendeley Group',
+	  'field_name' => 'field_mendeley_group_id',
+	  'type' => 'text',
+	  'widget_type' => 'optionwidgets_select',
+	  'change' => 'Change basic information',
+	  'weight' => '31',
+	  'description' => '',
+	  'default_value' => 
+	  array(
+	    0 => 
+	    array(
+	      'value' => '',
+	    ),
+	  ),
+	  'default_value_php' => '',
+	  'default_value_widget' => NULL,
+	  'required' => 0,
+	  'multiple' => '0',
+	  'text_processing' => '0',
+	  'max_length' => '',
+	  'allowed_values' => '',
+	  'allowed_values_php' => 'return array("abc" => "1");',
+	  'op' => 'Save field settings',
+	  'module' => 'text',
+	  'widget_module' => 'optionwidgets',
+	  'columns' => 
+	  array(
+	    'value' => 
+	    array(
+	      'type' => 'text',
+	      'size' => 'big',
+	      'not null' => false,
+	      'sortable' => true,
+	      'views' => true,
+	    ),
+	  ),
+	  'display_settings' => 
+	  array(
+	    'label' => 
+	    array(
+	      'format' => 'above',
+	      'exclude' => 0,
+	    ),
+	    'teaser' => 
+	    array(
+	      'format' => 'default',
+	      'exclude' => 0,
+	    ),
+	    'full' => 
+	    array(
+	      'format' => 'default',
+	      'exclude' => 0,
+	    ),
+	    4 => 
+	    array(
+	      'format' => 'default',
+	      'exclude' => 0,
+	    ),
+	  ),
+	);
+}

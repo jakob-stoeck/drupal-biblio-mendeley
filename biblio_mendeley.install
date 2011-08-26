@@ -33,7 +33,7 @@ function biblio_mendeley_install() {
   drupal_install_schema('biblio_mendeley');
   module_load_include('inc', 'content', 'includes/content.crud');
   module_load_include('cck', 'biblio_mendeley', 'includes/mendeley_group_id');
-  content_field_instance_create($field);
+  content_field_instance_create(biblio_mendeley_get_mendeley_group_id_definition());
 }
 
 function biblio_mendeley_uninstall() {
@@ -69,4 +69,13 @@ function biblio_mendeley_schema() {
     'primary key' => array('nid'),
   );
   return $schema;
+}
+
+/**
+ * Implements hook_update_N()
+ */
+function biblio_mendeley_update_6112() {
+  module_load_include('inc', 'content', 'includes/content.crud');
+  module_load_include('cck', 'biblio_mendeley', 'includes/mendeley_group_id');
+  content_field_instance_create(biblio_mendeley_get_mendeley_group_id_definition());
 }
