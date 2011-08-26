@@ -1,0 +1,85 @@
+<?php
+// $Id$
+/**
+ *   biblio_mendeley.module for Drupal
+ *
+ *   Copyright (C) 2010  Jakob Stoeck
+ *
+ *   This program is free software; you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation; either version 2 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License along
+ *   with this program; if not, write to the Free Software Foundation, Inc.,
+ *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ */
+
+/**
+ * @file
+ * Database table creation for biblio_mendeley module.
+ */
+
+/**
+ * Implements of hook_install().
+ */
+function biblio_mendeley_install() {
+  drupal_install_schema('biblio_mendeley');
+  module_load_include('inc', 'content', 'includes/content.crud');
+  module_load_include('cck', 'biblio_mendeley', 'includes/mendeley_group_id');
+<<<<<<< HEAD
+  content_field_instance_create(biblio_mendeley_get_mendeley_group_id_definition());
+=======
+  content_field_instance_create($field);
+>>>>>>> 376351d44d4c08c92418d2126cf9682362dda7a9
+}
+
+function biblio_mendeley_uninstall() {
+  drupal_uninstall_schema('biblio_mendeley');
+}
+
+function biblio_mendeley_enable() {
+  biblio_mendeley_set_system_weight();
+}
+
+function biblio_mendeley_set_system_weight() {
+  return update_sql("UPDATE {system} SET weight = 19 WHERE name = 'biblio_mendeley'");
+}
+
+/**
+ * Implements hook_schema().
+ */
+function biblio_mendeley_schema() {
+  $schema = array();
+  $schema['biblio_mendeley'] = array(
+    'description' => 'Stores a connection between Biblio {node}s and Mendeley document ids',
+    'fields' => array(
+      'biblio_mendeley_doc_id' => array('type' => 'varchar', 'not null' => TRUE, 'length' => 255),
+      'nid' => array('type' => 'int', 'not null' => TRUE),
+      'biblio_mendeley_last_sync' => array(
+        'description' => t('The last unix timestamp when it was confirmed that local node equals remote document'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      )
+    ),
+    'primary key' => array('nid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_update_N()
+ */
+function biblio_mendeley_update_6112() {
+  module_load_include('inc', 'content', 'includes/content.crud');
+  module_load_include('cck', 'biblio_mendeley', 'includes/mendeley_group_id');
+  content_field_instance_create(biblio_mendeley_get_mendeley_group_id_definition());
+}
