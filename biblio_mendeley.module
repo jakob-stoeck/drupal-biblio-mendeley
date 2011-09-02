@@ -108,13 +108,27 @@ function biblio_mendeley_admin() {
 		'#description' => t('Update/delete/add documents in Mendeley if changed in Biblio.'),
 	);
 
-	$form['remote_sync']['biblio_mendeley_group_id'] = array(
-		'#type' => 'textfield',
-		'#title' => t('Mendeley Group ID'),
-		'#default_value' => variable_get('biblio_mendeley_group_id', NULL),
-		'#size' => 30,
-		'#maxlength' => 60,
-		'#description' => t('The Mendeley group id to which uploaded documents are added. If empty, uploads to the private library of the Mendeley API consumer key owner.'),
+	$form['group'] = array(
+		'#type' => 'fieldset',
+		'#title' => t('Mendeley Groups'),
+		'#collapsible' => TRUE,
+	);
+
+	$mendeley = biblio_mendeley_get_mendeley_client();
+	$mendeley_groups = $mendeley->get('groups');
+	foreach ($mendeley_groups as $m) {
+		$mendeley_group_options[$m->id] = $m->name;
+	}
+
+	$form['group']['biblio_mendeley_group_ids'] = array(
+		'#type' => 'select',
+		'#multiple' => TRUE,
+		'#title' => t('Mendeley Groups'),
+		'#required' => FALSE,
+		'#default_value' => variable_get('biblio_mendeley_group_ids', variable_get('biblio_mendeley_group_id', NULL)), // backward-compatible with older single group_id
+		'#options' => $mendeley_group_options,
+		'#size' => 5,
+		'#description' => t('The Mendeley groups to which uploaded documents may be added. If empty, uploads to the private library of the Mendeley API consumer key owner.'),
 	);
 
 	$form['consumer'] = array(
