@@ -207,10 +207,6 @@ function biblio_mendeley_form_biblio_node_form_alter(&$form, &$form_state) {
     '#type' => 'value',
     '#value' => $form_state['values']['biblio_mendeley_doc_id']
   );
-  $form['biblio_mendeley_group_id'] = array(
-    '#type' => 'value',
-    '#value' => $form_state['values']['biblio_mendeley_group_id']
-  );
 }
 
 /**
