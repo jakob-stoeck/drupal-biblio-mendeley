@@ -33,7 +33,11 @@ function biblio_mendeley_install() {
   drupal_install_schema('biblio_mendeley');
   module_load_include('inc', 'content', 'includes/content.crud');
   module_load_include('cck', 'biblio_mendeley', 'includes/mendeley_group_id');
+<<<<<<< HEAD
   content_field_instance_create(biblio_mendeley_get_mendeley_group_id_definition());
+=======
+  content_field_instance_create($field);
+>>>>>>> 376351d44d4c08c92418d2126cf9682362dda7a9
 }
 
 function biblio_mendeley_uninstall() {
