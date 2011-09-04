@@ -21,7 +21,7 @@ return $mendeley_group_id = array(
   'text_processing' => '0',
   'max_length' => '',
   'allowed_values' => '',
-  'allowed_values_php' => 'return array(\'123\' => \'group test\', \'456\' => \'test over\');',
+  'allowed_values_php' => 'return biblio_mendeley_groups(TRUE);',
   'op' => 'Save field settings',
   'module' => 'text',
   'widget_module' => 'optionwidgets',

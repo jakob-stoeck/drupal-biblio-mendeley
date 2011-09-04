@@ -51,6 +51,45 @@ function biblio_mendeley_perm() {
 }
 
 /**
+ * Returns an array of groups of the user
+ *
+ * @param bool $activated_only return only groups which are selected in the admin form
+ * @return array $group id => group name
+ */
+function biblio_mendeley_groups($activated_only = FALSE) {
+	$mendeley = biblio_mendeley_get_mendeley_client();
+	$groups = array();
+	try {
+		$mendeley_groups = $mendeley->get('groups');
+		foreach ($mendeley_groups as $m) {
+			$groups[$m->id] = $m->name;
+		}
+	} catch (Exception $e) {} // happens e.g. without internet connection
+	if ($activated_only) {
+		$groups = array_intersect_key($groups, array_flip(variable_get('biblio_mendeley_group_ids', array())));
+	}
+	return $groups;
+}
+
+/**
+ * Returns an array of vocabularies of the user
+ *
+ * @return array vocabulary id => vocabulary name
+ */
+function biblio_mendeley_vocabularies() {
+	$vocabularies = module_invoke('taxonomy', 'get_vocabularies');
+	$taxo_options = array(
+		0 => '<'. t('none') .'>',
+	);
+  if(count($vocabularies)) {
+    foreach ($vocabularies as $voc) {
+      $taxo_options[$voc->vid] = $voc->name;
+    }
+	}
+	return $taxo_options;
+}
+
+/**
  * Uses system_settings_form
  */
 function biblio_mendeley_admin() {
@@ -58,7 +97,7 @@ function biblio_mendeley_admin() {
 
 	$form['local_sync'] = array(
 		'#type' => 'fieldset',
-		'#title' => t('Local Biblio Nodes Sync'),
+		'#title' => t('Local Sync'),
 		'#collapsible' => TRUE,
 	);
 
@@ -78,26 +117,18 @@ function biblio_mendeley_admin() {
 		'#description' => t('How many existing Biblio nodes should be checked for updates with Mendeley in one run. Don\'t set this number too high or you could reach the Mendeley rate limit.'),
 	);
 
-	$vocabularies = module_invoke('taxonomy', 'get_vocabularies');
-  if(count($vocabularies)) {
-		$taxo_options = array();
-	  $taxo_options[0] = '<'. t('none') .'>';
-    foreach ($vocabularies as $voc) {
-      $taxo_options[$voc->vid] =  $voc->name;
-    }
-		$form['local_sync']['biblio_mendeley_tag_vocabulary'] = array(
-			'#type' => 'select',
-			'#title' => t('Vocabulary'),
-			'#default_value' => variable_get('biblio_mendeley_tag_vocabulary', 0),
-			'#options' => $taxo_options,
-			'#description' => t('Choose a taxonomy if you want to sync Mendeley tags with a taxonomy of Biblio nodes. Note: This has no influence on Mendeley or Biblio keywords.'),
-			'#multiple' => FALSE,
-		);
-	}
+	$form['local_sync']['biblio_mendeley_tag_vocabulary'] = array(
+		'#type' => 'select',
+		'#title' => t('Vocabulary'),
+		'#default_value' => variable_get('biblio_mendeley_tag_vocabulary', 0),
+		'#options' => biblio_mendeley_vocabularies(),
+		'#description' => t('Choose a taxonomy if you want to sync Mendeley tags with a taxonomy of Biblio nodes. Note: This has no influence on Mendeley or Biblio keywords.'),
+		'#multiple' => FALSE,
+	);
 
 	$form['remote_sync'] = array(
 		'#type' => 'fieldset',
-		'#title' => t('Remote Mendeley Documents Sync'),
+		'#title' => t('Remote Sync'),
 		'#collapsible' => TRUE,
 	);
 
@@ -108,36 +139,24 @@ function biblio_mendeley_admin() {
 		'#description' => t('Update/delete/add documents in Mendeley if changed in Biblio.'),
 	);
 
-	$form['group'] = array(
+	$form['mendeley'] = array(
 		'#type' => 'fieldset',
-		'#title' => t('Mendeley Groups'),
+		'#title' => 'Mendeley',
 		'#collapsible' => TRUE,
 	);
 
-	$mendeley = biblio_mendeley_get_mendeley_client();
-	$mendeley_groups = $mendeley->get('groups');
-	foreach ($mendeley_groups as $m) {
-		$mendeley_group_options[$m->id] = $m->name;
-	}
-
-	$form['group']['biblio_mendeley_group_ids'] = array(
+	$form['mendeley']['biblio_mendeley_group_ids'] = array(
 		'#type' => 'select',
 		'#multiple' => TRUE,
-		'#title' => t('Mendeley Groups'),
+		'#title' => t('Enabled Groups'),
 		'#required' => FALSE,
 		'#default_value' => variable_get('biblio_mendeley_group_ids', variable_get('biblio_mendeley_group_id', NULL)), // backward-compatible with older single group_id
-		'#options' => $mendeley_group_options,
+		'#options' => biblio_mendeley_groups(),
 		'#size' => 5,
 		'#description' => t('The Mendeley groups to which uploaded documents may be added. If empty, uploads to the private library of the Mendeley API consumer key owner.'),
 	);
 
-	$form['consumer'] = array(
-		'#type' => 'fieldset',
-		'#title' => t('Consumer'),
-		'#collapsible' => TRUE,
-	);
-
-	$form['consumer']['biblio_mendeley_consumer_key'] = array(
+	$form['mendeley']['biblio_mendeley_consumer_key'] = array(
 		'#type' => 'textfield',
 		'#title' => t('Mendeley API Consumer Key'),
 		'#default_value' => variable_get('biblio_mendeley_consumer_key', NULL),
@@ -146,13 +165,22 @@ function biblio_mendeley_admin() {
 		'#description' => t('This value overrides the default setting in mendeleyapi/Configuration.php.'),
 	);
 
-	$form['consumer']['biblio_mendeley_consumer_secret'] = array(
+	$form['mendeley']['biblio_mendeley_consumer_secret'] = array(
 		'#type' => 'textfield',
 		'#title' => t('Mendeley API Consumer Secret'),
 		'#default_value' => variable_get('biblio_mendeley_consumer_secret', NULL),
 		'#size' => 30,
 		'#maxlength' => 60,
 		'#description' => t('This value overrides the default setting in mendeleyapi/Configuration.php.'),
+	);
+
+	$form['mendeley']['biblio_mendeley_upper_limit'] = array(
+		'#type' => 'textfield',
+		'#title' => t('Mendeley Upper Limit'),
+		'#default_value' => variable_get('biblio_mendeley_upper_limit', 100000),
+		'#size' => 30,
+		'#maxlength' => 60,
+		'#description' => t('The Mendeley API needs an upper limit. This should be higher than the amount of your Mendeley files.'),
 	);
 	$form = system_settings_form($form);
 	$form['#submit'][] = 'biblio_mendeley_admin_submit';
@@ -257,7 +285,7 @@ function biblio_mendeley_nodeapi(&$node, $op, $a3 = NULL, $a4 = NULL) {
  * Indicates if biblio_mendeley_synchronize is running
  *
  * A flag to e.g. disable nodeapi hooks while mass-inserting
- * 
+ *
  * @param boolean $default
  */
 function biblio_mendeley_is_synchronizing($default = FALSE) {
@@ -283,87 +311,95 @@ function biblio_mendeley_cron() {
  * All local content which was not uploaded to Mendeley will be erased. Make sure, all users have "insert mendeley document" privileges.
  */
 function biblio_mendeley_synchronize() {
-	if(($groupId = variable_get('biblio_mendeley_group_id', FALSE)) && variable_get('biblio_mendeley_sync_local', FALSE)) {
-		$mendeley = biblio_mendeley_get_mendeley_client();
+	if (!variable_get('biblio_mendeley_sync_local', FALSE)) {
+		return;
+	}
+	$mendeley = biblio_mendeley_get_mendeley_client();
+	$remote_group_ids = array();
+	foreach (biblio_mendeley_groups(TRUE) as $group_id => $group_name) {
 		try {
-			$all_items = 100000;
-			$group = $mendeley->getGroupDocuments($groupId, array('items' => $all_items));
-
+			$group = $mendeley->getGroupDocuments($group_id, array('items' => variable_get('biblio_mendeley_upper_limit', 100000)));
 			if($group->total_pages != 1) {
-				// logic works only with the whole set of documents
-				throw new Exception(t('Couldn\'t fetch all documents at once, perhaps because there are more than %max_results (%total_results). Please open an Biblio issue on drupal.org if that happens to you.', array('%max_results' => $all_items, '%total_results' => $group->total_results)));
+				// logic works only with the whole set of documents but Mendeley allows only an upper limit
+				throw new Exception(t('Couldn\'t fetch all documents at once, perhaps because there are more than %max_results Mendeley documents. Please change the upper limit in the Biblio Mendeley settings.', array('%max_results' => variable_get('biblio_mendeley_upper_limit', 100000))));
 			}
-
-			// get list of doc ids and node ids
-			$local_group_ids = array_filter((array)_biblio_mendeley_get_doc_id());
-			$remote_group_ids = array_filter((array)$group->document_ids);
-
-			$to_be_deleted = array_diff($local_group_ids, $remote_group_ids);
-			$to_be_inserted = array_diff($remote_group_ids, $local_group_ids);
-			$to_be_updated = array_intersect($local_group_ids, $remote_group_ids);
-
-			drupal_set_message(t('Trying to delete %delete, insert %insert and looking for updates of %update biblio documents.', array(
-				'%delete' => count($to_be_deleted),
-				'%insert' => count($to_be_inserted),
-				'%update' => count($to_be_updated),
-			)), 'status');
-
-			$success = array(
-				'delete' => 0,
-				'insert' => 0,
-				'update' => 0,
-			);
-
-			biblio_mendeley_is_synchronizing(TRUE);
-			// we need to switch to a user with update, delete, insert privileges
-			global $user;
-			$original_user = $user;
-			$user = user_load(1);
-
-			foreach($to_be_deleted as $nid => $biblio_mendeley_doc_id) {
-				$node = new stdClass();
-				$node->nid = $nid;
-				_biblio_mendeley_delete_local($node);
-				node_delete($node->nid);
-				_biblio_mendeley_calm_the_cache();
-				$success['delete']++;
-			}
-
-			foreach($to_be_inserted as $biblio_mendeley_doc_id) {
-				$doc = MendeleyBiblioDoc::constructWithDocumentId($biblio_mendeley_doc_id);
-				$node = $doc->toNode();
-				_biblio_mendeley_insert_local($node);
-				_biblio_mendeley_calm_the_cache();
-				$success['insert']++;
-			}
-
-			$update_amount = variable_get('biblio_mendeley_sync_amount', 0);
-
-			foreach($to_be_updated as $nid => $biblio_mendeley_doc_id) {
-				if($update_amount-- <= 0) {
-					break;
-				}
-				$node = node_load($nid, NULL, TRUE);
-				$node->biblio_mendeley_doc_id = $biblio_mendeley_doc_id;
-				$updated = _biblio_mendeley_update_local($node);
-				_biblio_mendeley_calm_the_cache();
-				if($updated === true) {
-					$success['update']++;
-				}
-			}
-
-			$user = $original_user;
-			biblio_mendeley_is_synchronizing(FALSE);
-			drupal_set_message(t('Deleted %delete, inserted %insert and updated %update biblio documents.', array(
-				'%delete' => $success['delete'],
-				'%insert' => $success['insert'],
-				'%update' => $success['update'],
-			)), 'status');
-
+			$remote_group_ids[] = (array)$group->document_ids;
 		} catch(Exception $e) {
-			watchdog('error', $e->getMessage());
-			drupal_set_message($e->getMessage(), 'error');
+			$message = t('Error while synchronizing "%group": %error', array(
+				'%group' => $group_name,
+				'%error' => $e->getMessage(),
+			));
+			watchdog('error', $message);
+			drupal_set_message($message, 'error');
+			return;
 		}
+
+		// get list of doc ids and node ids
+		$local_group_ids = array_filter((array)_biblio_mendeley_get_doc_id());
+		$remote_group_ids = array_filter($remote_group_ids);
+
+		$to_be_deleted = array_diff($local_group_ids, $remote_group_ids);
+		$to_be_inserted = array_diff($remote_group_ids, $local_group_ids);
+		$to_be_updated = array_intersect($local_group_ids, $remote_group_ids);
+
+		drupal_set_message(t('Trying to delete %delete, insert %insert and looking for updates of %update biblio documents.', array(
+			'%delete' => count($to_be_deleted),
+			'%insert' => count($to_be_inserted),
+			'%update' => count($to_be_updated),
+		)), 'status');
+
+		$success = array(
+			'delete' => 0,
+			'insert' => 0,
+			'update' => 0,
+		);
+
+		biblio_mendeley_is_synchronizing(TRUE);
+		// we need to switch to a user with update, delete, insert privileges
+		global $user;
+		$original_user = $user;
+		$user = user_load(1);
+
+		foreach($to_be_deleted as $nid => $biblio_mendeley_doc_id) {
+			$node = new stdClass();
+			$node->nid = $nid;
+			_biblio_mendeley_delete_local($node);
+			node_delete($node->nid);
+			_biblio_mendeley_calm_the_cache();
+			$success['delete']++;
+		}
+
+		foreach($to_be_inserted as $biblio_mendeley_doc_id) {
+			$doc = MendeleyBiblioDoc::constructWithDocumentId($biblio_mendeley_doc_id);
+			$node = $doc->toNode();
+			_biblio_mendeley_insert_local($node);
+			_biblio_mendeley_calm_the_cache();
+			$success['insert']++;
+		}
+
+		$update_amount = variable_get('biblio_mendeley_sync_amount', 0);
+
+		foreach($to_be_updated as $nid => $biblio_mendeley_doc_id) {
+			if($update_amount-- <= 0) {
+				break;
+			}
+			$node = node_load($nid, NULL, TRUE);
+			$node->biblio_mendeley_doc_id = $biblio_mendeley_doc_id;
+			$updated = _biblio_mendeley_update_local($node);
+			_biblio_mendeley_calm_the_cache();
+			if($updated === true) {
+				$success['update']++;
+			}
+		}
+
+		$user = $original_user;
+		biblio_mendeley_is_synchronizing(FALSE);
+		drupal_set_message(t('Deleted %delete, inserted %insert and updated %update biblio documents in group "%group".', array(
+			'%delete' => $success['delete'],
+			'%insert' => $success['insert'],
+			'%update' => $success['update'],
+			'%group' => $group_name,
+		)), 'status');
 	}
 }
 
