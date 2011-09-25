@@ -40,18 +40,6 @@ function biblio_mendeley_get_mendeley_client() {
 }
 
 /**
- * @return array of group id => group name
- */
-function biblio_mendeley_get_groups() {
-	$mendeley = biblio_mendeley_get_mendeley_client();
-	$mendeley_groups = $mendeley->get('groups');
-	foreach ($mendeley_groups as $m) {
-		$mendeley_group_options[$m->id] = $m->name;
-	}
-	return $mendeley_group_options;
-}
-
-/**
  * Implements hook_perm()
  */
 function biblio_mendeley_perm() {
@@ -157,21 +145,13 @@ function biblio_mendeley_admin() {
 		'#collapsible' => TRUE,
 	);
 
-<<<<<<< HEAD
 	$form['mendeley']['biblio_mendeley_group_ids'] = array(
-=======
-	$form['group']['biblio_mendeley_group_ids'] = array(
->>>>>>> 92c79f93c9044c82c851693dd2ab194db21a3559
 		'#type' => 'select',
 		'#multiple' => TRUE,
 		'#title' => t('Enabled Groups'),
 		'#required' => FALSE,
 		'#default_value' => variable_get('biblio_mendeley_group_ids', variable_get('biblio_mendeley_group_id', NULL)), // backward-compatible with older single group_id
-<<<<<<< HEAD
 		'#options' => biblio_mendeley_groups(),
-=======
-		'#options' => biblio_mendeley_get_groups(),
->>>>>>> 92c79f93c9044c82c851693dd2ab194db21a3559
 		'#size' => 5,
 		'#description' => t('The Mendeley groups to which uploaded documents may be added. If empty, uploads to the private library of the Mendeley API consumer key owner.'),
 	);
