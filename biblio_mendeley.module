@@ -319,11 +319,11 @@ function biblio_mendeley_synchronize() {
 	foreach (biblio_mendeley_groups(TRUE) as $group_id => $group_name) {
 		try {
 			$group = $mendeley->getGroupDocuments($group_id, array('items' => variable_get('biblio_mendeley_upper_limit', 100000)));
-			if($group->total_pages != 1) {
+			if($group->total_pages > 1) {
 				// logic works only with the whole set of documents but Mendeley allows only an upper limit
 				throw new Exception(t('Couldn\'t fetch all documents at once, perhaps because there are more than %max_results Mendeley documents. Please change the upper limit in the Biblio Mendeley settings.', array('%max_results' => variable_get('biblio_mendeley_upper_limit', 100000))));
 			}
-			$remote_group_ids[] = (array)$group->document_ids;
+			$remote_group_ids = (array)$group->document_ids + $remote_group_ids;
 		} catch(Exception $e) {
 			$message = t('Error while synchronizing "%group": %error', array(
 				'%group' => $group_name,
@@ -333,74 +333,73 @@ function biblio_mendeley_synchronize() {
 			drupal_set_message($message, 'error');
 			return;
 		}
-
-		// get list of doc ids and node ids
-		$local_group_ids = array_filter((array)_biblio_mendeley_get_doc_id());
-		$remote_group_ids = array_filter($remote_group_ids);
-
-		$to_be_deleted = array_diff($local_group_ids, $remote_group_ids);
-		$to_be_inserted = array_diff($remote_group_ids, $local_group_ids);
-		$to_be_updated = array_intersect($local_group_ids, $remote_group_ids);
-
-		drupal_set_message(t('Trying to delete %delete, insert %insert and looking for updates of %update biblio documents.', array(
-			'%delete' => count($to_be_deleted),
-			'%insert' => count($to_be_inserted),
-			'%update' => count($to_be_updated),
-		)), 'status');
-
-		$success = array(
-			'delete' => 0,
-			'insert' => 0,
-			'update' => 0,
-		);
-
-		biblio_mendeley_is_synchronizing(TRUE);
-		// we need to switch to a user with update, delete, insert privileges
-		global $user;
-		$original_user = $user;
-		$user = user_load(1);
-
-		foreach($to_be_deleted as $nid => $biblio_mendeley_doc_id) {
-			$node = new stdClass();
-			$node->nid = $nid;
-			_biblio_mendeley_delete_local($node);
-			node_delete($node->nid);
-			_biblio_mendeley_calm_the_cache();
-			$success['delete']++;
-		}
-
-		foreach($to_be_inserted as $biblio_mendeley_doc_id) {
-			$doc = MendeleyBiblioDoc::constructWithDocumentId($biblio_mendeley_doc_id);
-			$node = $doc->toNode();
-			_biblio_mendeley_insert_local($node);
-			_biblio_mendeley_calm_the_cache();
-			$success['insert']++;
-		}
-
-		$update_amount = variable_get('biblio_mendeley_sync_amount', 0);
-
-		foreach($to_be_updated as $nid => $biblio_mendeley_doc_id) {
-			if($update_amount-- <= 0) {
-				break;
-			}
-			$node = node_load($nid, NULL, TRUE);
-			$node->biblio_mendeley_doc_id = $biblio_mendeley_doc_id;
-			$updated = _biblio_mendeley_update_local($node);
-			_biblio_mendeley_calm_the_cache();
-			if($updated === true) {
-				$success['update']++;
-			}
-		}
-
-		$user = $original_user;
-		biblio_mendeley_is_synchronizing(FALSE);
-		drupal_set_message(t('Deleted %delete, inserted %insert and updated %update biblio documents in group "%group".', array(
-			'%delete' => $success['delete'],
-			'%insert' => $success['insert'],
-			'%update' => $success['update'],
-			'%group' => $group_name,
-		)), 'status');
 	}
+
+	// get list of doc ids and node ids
+	$local_group_ids = array_filter((array)_biblio_mendeley_get_doc_id());
+	$remote_group_ids = array_filter($remote_group_ids);
+
+	$to_be_deleted = array_diff($local_group_ids, $remote_group_ids);
+	$to_be_inserted = array_diff($remote_group_ids, $local_group_ids);
+	$to_be_updated = array_intersect($local_group_ids, $remote_group_ids);
+
+	drupal_set_message(t('Trying to delete %delete, insert %insert and looking for updates of %update biblio documents.', array(
+		'%delete' => count($to_be_deleted),
+		'%insert' => count($to_be_inserted),
+		'%update' => count($to_be_updated),
+	)), 'status');
+
+	$success = array(
+		'delete' => 0,
+		'insert' => 0,
+		'update' => 0,
+	);
+
+	biblio_mendeley_is_synchronizing(TRUE);
+	// we need to switch to a user with update, delete, insert privileges
+	global $user;
+	$original_user = $user;
+	$user = user_load(1);
+
+	foreach($to_be_deleted as $nid => $biblio_mendeley_doc_id) {
+		$node = new stdClass();
+		$node->nid = $nid;
+		_biblio_mendeley_delete_local($node);
+		node_delete($node->nid);
+		_biblio_mendeley_calm_the_cache();
+		$success['delete']++;
+	}
+
+	foreach($to_be_inserted as $biblio_mendeley_doc_id) {
+		$doc = MendeleyBiblioDoc::constructWithDocumentId($biblio_mendeley_doc_id);
+		$node = $doc->toNode();
+		_biblio_mendeley_insert_local($node);
+		_biblio_mendeley_calm_the_cache();
+		$success['insert']++;
+	}
+
+	$update_amount = variable_get('biblio_mendeley_sync_amount', 0);
+
+	foreach($to_be_updated as $nid => $biblio_mendeley_doc_id) {
+		if($update_amount-- <= 0) {
+			break;
+		}
+		$node = node_load($nid, NULL, TRUE);
+		$node->biblio_mendeley_doc_id = $biblio_mendeley_doc_id;
+		$updated = _biblio_mendeley_update_local($node);
+		_biblio_mendeley_calm_the_cache();
+		if($updated === true) {
+			$success['update']++;
+		}
+	}
+
+	$user = $original_user;
+	biblio_mendeley_is_synchronizing(FALSE);
+	drupal_set_message(t('Deleted %delete, inserted %insert and updated %update biblio documents.', array(
+		'%delete' => $success['delete'],
+		'%insert' => $success['insert'],
+		'%update' => $success['update'],
+	)), 'status');
 }
 
 /**
@@ -542,13 +541,12 @@ function _biblio_mendeley_delete_remote($node) {
  */
 function _biblio_mendeley_update_remote($node) {
 	if($biblio_mendeley_doc_id = _biblio_mendeley_get_doc_id($node)) {
-		$mendeley = biblio_mendeley_get_mendeley_client();
 		$biblioDoc = MendeleyBiblioDoc::constructWithNode($node, variable_get('biblio_mendeley_group_id', NULL));
 		try {
+			$mendeley = biblio_mendeley_get_mendeley_client();
 			$response = $mendeley->post('documents', $biblioDoc->toParams());
-			$mendeley->delete('documents/' . $biblio_mendeley_doc_id);
-
 			if($response->document_id) {
+				$mendeley->delete('documents/' . $biblio_mendeley_doc_id);
 				$node->biblio_mendeley_doc_id = $response->document_id;
 				$node->biblio_mendeley_last_sync = time();
 				drupal_write_record('biblio_mendeley', $node, 'nid');
