@@ -469,6 +469,7 @@ function _biblio_mendeley_update_local($node) {
 		$local = MendeleyBiblioDoc::constructWithNode($node);
 		$skip = MendeleyBiblioDoc::notMapped();
 		foreach($remote as $key => $remoteValue) {
+			if ($key == 'tags' && !variable_get('biblio_mendeley_tag_vocabulary', 0)) continue; // tags should not be saved locally if they are disabled in the biblio mendeley admin form
 			if(!in_array($key, $skip) && (trim($remoteValue) != trim($local->$key))) {
 				if(Configuration::DEBUG > 0) {
 					var_dump(array('first difference in ' . $node->title . ' (' . $node->biblio_mendeley_doc_id . ') for ' . $key => array('remote' => $remoteValue, 'local' => $local->$key)));
