@@ -22,43 +22,44 @@ To contact Mendeley you need the [Mendeley API client][5]. I recommend installin
 
 Not all Biblio publication types are supported by Mendeley and vice-versa. They are mapped like this:
 
-    <?php
-    // biblio types in the mendeley api
-    BIBLIO_BILL => 'Bill',
-    BIBLIO_BOOK => 'Book',
-    BIBLIO_BOOK_CHAPTER => 'Book Section',
-    BIBLIO_BROADCAST => 'Television Broadcast',
-    BIBLIO_CASE => 'Case',
-    BIBLIO_CONFERENCE_PROCEEDINGS => 'Conference Proceedings',
-    BIBLIO_FILM => 'Film',
-    BIBLIO_HEARING => 'Hearing',
-    BIBLIO_JOURNAL_ARTICLE => 'Journal Article',
-    BIBLIO_MAGAZINE_ARTICLE => 'Magazine Article',
-    BIBLIO_NEWSPAPER_ARTICLE => 'Newspaper Article',
-    BIBLIO_PATENT => 'Patent',
-    BIBLIO_SOFTWARE => 'Computer Program',
-    BIBLIO_STATUTE => 'Statute',
-    BIBLIO_THESIS => 'Thesis',
-    BIBLIO_WEB_ARTICLE => 'Web Page',
-    // biblio types not yet in the mendeley api:
-    BIBLIO_ARTWORK => 'Generic',
-    BIBLIO_AUDIOVISUAL => 'Generic',
-    BIBLIO_CHART => 'Generic',
-    BIBLIO_CLASSICAL => 'Generic',
-    BIBLIO_CONFERENCE_PAPER => 'Generic',
-    BIBLIO_DATABASE => 'Generic',
-    BIBLIO_GOVERNMENT_REPORT => 'Generic',
-    BIBLIO_LEGAL_RULING => 'Generic',
-    BIBLIO_MANUSCRIPT => 'Generic',
-    BIBLIO_MAP => 'Generic',
-    BIBLIO_MISCELLANEOUS => 'Generic',
-    BIBLIO_MISCELLANEOUS_SECTION => 'Generic',
-    BIBLIO_PERSONAL => 'Generic',
-    BIBLIO_REPORT => 'Generic',
-    BIBLIO_UNPUBLISHED => 'Generic',
-    // mendeley api types not supported by biblio:
-    // ??? => 'Encyclopedia Article';
-    // ??? => 'Working Paper'; ?>
+```php
+// biblio types in the mendeley api
+BIBLIO_BILL => 'Bill',
+BIBLIO_BOOK => 'Book',
+BIBLIO_BOOK_CHAPTER => 'Book Section',
+BIBLIO_BROADCAST => 'Television Broadcast',
+BIBLIO_CASE => 'Case',
+BIBLIO_CONFERENCE_PROCEEDINGS => 'Conference Proceedings',
+BIBLIO_FILM => 'Film',
+BIBLIO_HEARING => 'Hearing',
+BIBLIO_JOURNAL_ARTICLE => 'Journal Article',
+BIBLIO_MAGAZINE_ARTICLE => 'Magazine Article',
+BIBLIO_NEWSPAPER_ARTICLE => 'Newspaper Article',
+BIBLIO_PATENT => 'Patent',
+BIBLIO_SOFTWARE => 'Computer Program',
+BIBLIO_STATUTE => 'Statute',
+BIBLIO_THESIS => 'Thesis',
+BIBLIO_WEB_ARTICLE => 'Web Page',
+// biblio types not yet in the mendeley api:
+BIBLIO_ARTWORK => 'Generic',
+BIBLIO_AUDIOVISUAL => 'Generic',
+BIBLIO_CHART => 'Generic',
+BIBLIO_CLASSICAL => 'Generic',
+BIBLIO_CONFERENCE_PAPER => 'Generic',
+BIBLIO_DATABASE => 'Generic',
+BIBLIO_GOVERNMENT_REPORT => 'Generic',
+BIBLIO_LEGAL_RULING => 'Generic',
+BIBLIO_MANUSCRIPT => 'Generic',
+BIBLIO_MAP => 'Generic',
+BIBLIO_MISCELLANEOUS => 'Generic',
+BIBLIO_MISCELLANEOUS_SECTION => 'Generic',
+BIBLIO_PERSONAL => 'Generic',
+BIBLIO_REPORT => 'Generic',
+BIBLIO_UNPUBLISHED => 'Generic',
+// mendeley api types not supported by biblio:
+// ??? => 'Encyclopedia Article';
+// ??? => 'Working Paper'; ?>
+```
 
 [0]: http://www.mendeley.com/
 [1]: http://drupal.org/project/biblio
@@ -66,4 +67,19 @@ Not all Biblio publication types are supported by Mendeley and vice-versa. They 
 [3]: http://drupal.org/project/biblio
 [5]: http://github.com/jakob-stoeck/mendeleyapi
 
-© 2010, 2011 Jakob Stoeck
+## GPL License
+
+© 2010-2013 Jakob Stoeck
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
